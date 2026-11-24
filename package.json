@@ -1,0 +1,563 @@
+{
+  "name": "one-minute-weather-bars",
+  "author": "ffran",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-watchface",
+    "weather",
+    "one-handed",
+    "analog"
+  ],
+  "private": true,
+  "dependencies": {
+    "@rebble/clay": "^1.0.8"
+  },
+  "pebble": {
+    "displayName": "One Minute Weather Bars",
+    "uuid": "6790323d-cf2e-445c-9018-563ba735d505",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "emery"
+    ],
+    "capabilities": [
+      "location",
+      "configurable"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "messageKeys": [
+      "theme",
+      "color_bg",
+      "color_hour",
+      "color_hand",
+      "color_hand_in",
+      "color_tick0",
+      "color_tick5",
+      "color_tick1",
+      "color_wday",
+      "color_mdate",
+      "color_wtext",
+      "color_tmax",
+      "color_tmin",
+      "color_pop",
+      "color_mm",
+      "color_icon",
+      "time_fmt",
+      "date_fmt",
+      "lang",
+      "units",
+      "interval",
+      "precip_mode",
+      "ndays",
+      "show_battery",
+      "wx",
+      "status",
+      "cmd",
+      "loc_mode",
+      "loc_name",
+      "wx_inside",
+      "wx_bars",
+      "tap_mode",
+      "sched_on",
+      "sched_start",
+      "sched_end",
+      "sched_days",
+      "rain_c0",
+      "rain_c5",
+      "rain_c10",
+      "rain_c20",
+      "day_start",
+      "night_start",
+      "day_refresh",
+      "night_refresh",
+      "sched_scope",
+      "peek_secs"
+    ],
+    "resources": {
+      "media": [
+        {
+          "name": "LATO_HOUR_33",
+          "type": "font",
+          "file": "fonts/Lato-Bold.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "LATO_HOUR_64",
+          "type": "font",
+          "file": "fonts/Lato-Bold.ttf",
+          "characterRegex": "[0-9]",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_PT_0",
+          "type": "bitmap",
+          "file": "images/cal/wd_pt_0.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_PT_1",
+          "type": "bitmap",
+          "file": "images/cal/wd_pt_1.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_PT_2",
+          "type": "bitmap",
+          "file": "images/cal/wd_pt_2.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_PT_3",
+          "type": "bitmap",
+          "file": "images/cal/wd_pt_3.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_PT_4",
+          "type": "bitmap",
+          "file": "images/cal/wd_pt_4.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_PT_5",
+          "type": "bitmap",
+          "file": "images/cal/wd_pt_5.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_PT_6",
+          "type": "bitmap",
+          "file": "images/cal/wd_pt_6.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_EN_0",
+          "type": "bitmap",
+          "file": "images/cal/wd_en_0.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_EN_1",
+          "type": "bitmap",
+          "file": "images/cal/wd_en_1.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_EN_2",
+          "type": "bitmap",
+          "file": "images/cal/wd_en_2.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_EN_3",
+          "type": "bitmap",
+          "file": "images/cal/wd_en_3.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_EN_4",
+          "type": "bitmap",
+          "file": "images/cal/wd_en_4.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_EN_5",
+          "type": "bitmap",
+          "file": "images/cal/wd_en_5.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "WD_EN_6",
+          "type": "bitmap",
+          "file": "images/cal/wd_en_6.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_1",
+          "type": "bitmap",
+          "file": "images/cal/day_1.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_2",
+          "type": "bitmap",
+          "file": "images/cal/day_2.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_3",
+          "type": "bitmap",
+          "file": "images/cal/day_3.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_4",
+          "type": "bitmap",
+          "file": "images/cal/day_4.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_5",
+          "type": "bitmap",
+          "file": "images/cal/day_5.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_6",
+          "type": "bitmap",
+          "file": "images/cal/day_6.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_7",
+          "type": "bitmap",
+          "file": "images/cal/day_7.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_8",
+          "type": "bitmap",
+          "file": "images/cal/day_8.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_9",
+          "type": "bitmap",
+          "file": "images/cal/day_9.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_10",
+          "type": "bitmap",
+          "file": "images/cal/day_10.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_11",
+          "type": "bitmap",
+          "file": "images/cal/day_11.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_12",
+          "type": "bitmap",
+          "file": "images/cal/day_12.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_13",
+          "type": "bitmap",
+          "file": "images/cal/day_13.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_14",
+          "type": "bitmap",
+          "file": "images/cal/day_14.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_15",
+          "type": "bitmap",
+          "file": "images/cal/day_15.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_16",
+          "type": "bitmap",
+          "file": "images/cal/day_16.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_17",
+          "type": "bitmap",
+          "file": "images/cal/day_17.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_18",
+          "type": "bitmap",
+          "file": "images/cal/day_18.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_19",
+          "type": "bitmap",
+          "file": "images/cal/day_19.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_20",
+          "type": "bitmap",
+          "file": "images/cal/day_20.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_21",
+          "type": "bitmap",
+          "file": "images/cal/day_21.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_22",
+          "type": "bitmap",
+          "file": "images/cal/day_22.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_23",
+          "type": "bitmap",
+          "file": "images/cal/day_23.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_24",
+          "type": "bitmap",
+          "file": "images/cal/day_24.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_25",
+          "type": "bitmap",
+          "file": "images/cal/day_25.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_26",
+          "type": "bitmap",
+          "file": "images/cal/day_26.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_27",
+          "type": "bitmap",
+          "file": "images/cal/day_27.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_28",
+          "type": "bitmap",
+          "file": "images/cal/day_28.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_29",
+          "type": "bitmap",
+          "file": "images/cal/day_29.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_30",
+          "type": "bitmap",
+          "file": "images/cal/day_30.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "name": "DAY_31",
+          "type": "bitmap",
+          "file": "images/cal/day_31.png",
+          "memoryFormat": "1BitPalette",
+          "spaceOptimization": "memory",
+          "targetPlatforms": [
+            "emery"
+          ]
+        }
+      ]
+    },
+    "usesPermissions": [
+      "Location",
+      {
+        "name": "Internet",
+        "parameters": {
+          "domains": [
+            "api.open-meteo.com",
+            "geocoding-api.open-meteo.com"
+          ]
+        }
+      }
+    ]
+  }
+}

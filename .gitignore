@@ -1,0 +1,6 @@
+build/
+node_modules/
+.lock-waf*
+tools/host/host
+tools/host/test_logic
+tools/__pycache__/

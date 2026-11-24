@@ -1,0 +1,38 @@
+name: build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Tests without the SDK (JS, C logic, 60-minute overlap check)
+        run: |
+          pip install pillow numpy scipy freetype-py
+          sh tools/run_tests.sh
+
+      - name: Install pebble-tool and the current SDK
+        run: |
+          pip install uv
+          uv tool install pebble-tool
+          yes | pebble sdk install latest
+
+      - name: Build PBW
+        run: pebble build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: one-minute-weather-pbw
+          path: build/*.pbw
