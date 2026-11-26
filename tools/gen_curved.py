@@ -11,7 +11,12 @@ from render import pf
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, '..')
 CX, CY, R = 100, 102, 103          # dial centre; text stands just outside the 100 px ring
-WDAY_MID, DAY_MID = -42, 40        # degrees from 12 o'clock
+# Both words sit on the corner diagonals through the dial centre (+-44.4 deg from 12 o'clock),
+# mirror images of each other. The day number is narrow enough to also be centred radially
+# (same gap to the ring as to the screen edges); the 3-letter weekday already fills its corner.
+DIAG = math.degrees(math.atan2(CX, CY))
+WDAY_MID, DAY_MID = -DIAG, DIAG    # degrees from 12 o'clock
+WDAY_R, DAY_R = R, R + 2
 
 PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -34,7 +39,7 @@ def glyph_rot(ch, ang):
     ImageDraw.Draw(im).text((4 * SS, 4 * SS), ch, font=FT, fill=255)
     return im.rotate(-ang, resample=Image.BICUBIC, expand=True)
 
-def curved(s, mid):
+def curved(s, mid, R):
     canvas = Image.new('L', (200 * SS, 228 * SS), 0)
     span = math.degrees(text_width(s) / R)
     a = mid - span / 2
@@ -63,11 +68,11 @@ def main():
     out = os.path.join(ROOT, 'resources', 'images', 'cal')
     os.makedirs(out, exist_ok=True)
     media, rows = [], []
-    items = [('WD_PT_%d' % i, s, WDAY_MID) for i, s in enumerate(PT)] + \
-            [('WD_EN_%d' % i, s, WDAY_MID) for i, s in enumerate(EN)] + \
-            [('DAY_%d' % d, str(d), DAY_MID) for d in range(1, 32)]
-    for name, s, mid in items:
-        img, x, y = curved(s, mid)
+    items = [('WD_PT_%d' % i, s, WDAY_MID, WDAY_R) for i, s in enumerate(PT)] + \
+            [('WD_EN_%d' % i, s, WDAY_MID, WDAY_R) for i, s in enumerate(EN)] + \
+            [('DAY_%d' % d, str(d), DAY_MID, DAY_R) for d in range(1, 32)]
+    for name, s, mid, r in items:
+        img, x, y = curved(s, mid, r)
         fn = name.lower() + '.png'
         save(img, os.path.join(out, fn))
         media.append({'name': name, 'type': 'bitmap', 'file': 'images/cal/' + fn,
