@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.1.0
+All notable changes to One Minute Weather Bars (Pebble Time 2 / emery).
+
+## 1.1.0 (2026-11-26)
+
+Requires the Pebble mobile app 2.0 or later for the built-in weather source; older apps use Open-Meteo automatically.
 
 ### New
 - **Weather from the Pebble app.** The forecast now comes from the weather the Pebble mobile app (2.0+) already keeps. The phone makes no GPS fix and no download of its own, which saves battery on the phone as well. Open-Meteo is still available in the settings, and the watchface switches to it automatically when the Pebble app's weather is not available.
@@ -28,5 +32,5 @@
 - Invalid coordinates from the phone or from the place search are ignored instead of being used or cached.
 - Opening the settings page repeatedly used more and more memory on the phone.
 
-## 1.0.0
+## 1.0.0 (2026-11-24)
 - First release.
