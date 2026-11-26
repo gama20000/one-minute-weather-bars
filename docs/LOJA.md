@@ -3,7 +3,7 @@
 Portal: https://dev-portal.rebble.io (login com a conta Rebble). Escolher "Add a Watchface".
 
 ## Ficheiros
-- `.pbw`: `one-minute-weather-bars.pbw` (versão 1.1.0, plataforma emery)
+- `.pbw`: `one-minute-weather-bars.pbw` (versão 1.1.1, plataforma emery)
 - Capturas de ecrã: PNG 200x228 (emery), máx. 5, sem moldura, só capturas reais da watchface
 - Banner (opcional): 720x320
 
@@ -18,6 +18,9 @@ Needs location and internet permissions (via the phone) to fetch the forecast. W
 Watchface de um só ponteiro para o Pebble Time 2: mostrador com 60 marcas, ponteiro de minutos curto e hora digital grande do lado oposto. Previsão a 6 dias (da app Pebble, ou da Open-Meteo sem conta) dentro do círculo e barras de chuva ao estilo Dataload em baixo: altura = probabilidade, número = mm previstos (inteiros).
 
 Definições na app Pebble: temas, escala de cores da chuva, meteorologia dentro do círculo e/ou em barras, horário para esconder a meteorologia, toque no pulso (alternar ou espreitar, com duração), poupança de energia, unidades, idioma e localização.
+
+## Notas de versão 1.1.1
+Fixed settings being ignored when saved during a forecast download, weather error status overwriting an in-flight settings delivery, non-numeric values from the weather source showing NaN, minute-update timer stopping on firmware without app_timer_reschedule, and forecast bar borders invisible on gray backgrounds. Full list in CHANGELOG.md.
 
 ## Notas de versão 1.1.0
 Weather now comes from the Pebble app (2.0+): no GPS fix or download on the phone. Open-Meteo stays as an option and automatic fallback. Weekday and date centred on the dial. Less battery and data: no download when saving settings, longer waits when the phone is unreachable, no requests while the weather is hidden. Fixes for wrong units after a °C/°F switch, settings lost on Bluetooth failures, rain amount in half-hour time zones and wrist-tap state after a restart. Full list in CHANGELOG.md.

@@ -2,6 +2,15 @@
 
 All notable changes to One Minute Weather Bars (Pebble Time 2 / emery).
 
+## 1.1.1 (2026-11-27)
+
+### Fixes
+- Settings saved while a forecast download was in progress could be ignored. The forecast now waits for the newer settings to reach the watch before being served.
+- A weather error status could be sent to the watch while a settings delivery was still in flight, overwriting the settings. The error now goes through the same delivery queue.
+- Parsing non-numeric temperature or precipitation values from the weather source (e.g. `null`, empty strings) could produce `NaN` on the display. The parser now rejects anything that is not a finite number.
+- Rescheduling the minute-update timer on the watch could fail silently when `app_timer_reschedule` was not available, causing the display to stop updating. The timer is now cancelled and recreated when reschedule is unavailable.
+- Forecast bar borders were invisible on gray or mid-tone theme backgrounds. The border colour now adapts to maintain contrast against the background.
+
 ## 1.1.0 (2026-11-26)
 
 Requires the Pebble mobile app 2.0 or later for the built-in weather source; older apps use Open-Meteo automatically.
