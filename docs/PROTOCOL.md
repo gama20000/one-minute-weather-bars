@@ -51,11 +51,13 @@ O relógio responde com `cmd` = 1 apenas se precisar de uma previsão nova.
 
 ## Previsão obsoleta (`cmd` = 3, telemóvel → relógio, junto com as definições)
 
-Ao guardar as definições, o telemóvel não descarrega nada. Se mudarem as unidades, a fonte ou a localização, ou se a meteorologia for ligada, as definições seguem com `cmd` = 3. O relógio considera a previsão vencida e anula a espera entre tentativas. Pede logo que a meteorologia possa aparecer, respeitando o horário e o toque no pulso. A previsão antiga continua no mostrador até chegar a nova.
+Ao guardar as definições, o telemóvel não descarrega nada. Se mudarem as unidades, a fonte ou a localização, ou se a meteorologia for ligada, as definições seguem com `cmd` = 3. O relógio considera a previsão vencida e anula a espera entre tentativas. Essa marca fica gravada, por isso sobrevive a um reinício do mostrador. Pede logo que a meteorologia possa aparecer, respeitando o horário e o toque no pulso. A previsão antiga continua no mostrador até chegar a nova.
 
-As definições ficam pendentes no telemóvel até o relógio confirmar a receção. Se o envio falhar, o telemóvel tenta outra vez passado um minuto, a cada mensagem do relógio e quando o JS arranca. Envia-as sempre antes de uma previsão, para que o relógio nunca receba, por exemplo, uma previsão em °F com as definições em °C.
+As definições ficam pendentes no telemóvel até o relógio confirmar a receção. Se o envio falhar, o telemóvel tenta outra vez uma única vez, passado um minuto. Depois disso, só volta a tentar a cada mensagem do relógio, a cada gravação das definições e quando o JS arranca. Envia-as sempre antes de uma previsão, para que o relógio nunca receba, por exemplo, uma previsão em °F com as definições em °C. Se não as conseguir entregar, retém a previsão.
 
-Se as definições relevantes mudarem durante um pedido, o telemóvel descarta esse resultado e faz um único pedido novo, se a meteorologia ainda for precisa. Um estado (`status`) igual ao anterior não é gravado de novo nem redesenha o mostrador.
+Uma previsão que não seja mais recente do que a guardada (por exemplo, a mesma previsão vencida da app Pebble) não reinicia a espera entre tentativas do relógio, e também não é gravada de novo se for igual.
+
+Se as definições relevantes mudarem durante um pedido, incluindo a espera pela entrega das definições, o telemóvel descarta esse resultado e faz um único pedido novo, se a meteorologia ainda for precisa. Um estado (`status`) igual ao anterior não é gravado de novo nem redesenha o mostrador.
 
 ## Fontes da previsão (definição `wx_source`, só no telemóvel)
 

@@ -83,6 +83,7 @@ int main(void) {
   assert(!weather_should_request(fetched + 100 * 60));
   weather_invalidate();
   assert(weather_should_request(fetched + 100 * 60));
+  assert(s_has[6] && s_ints[6] == 1);                  // the mark survives a restart
   // repeated identical status: no write, no change reported
   assert(weather_set_status(WX_ERR_NETWORK));
   assert(!weather_set_status(WX_ERR_NETWORK));
@@ -91,6 +92,25 @@ int main(void) {
   // persistence: a restart reloads the cached forecast
   weather_init();
   assert(weather_get()->valid && weather_get()->day[2].icon == ICON_STORM);
+  // ... and the "obsolete" mark from before the restart: still due at once
+  assert(weather_should_request(fetched + 60));
+  // the same (expired) forecast delivered again: no flash write / redraw, mark cleared, and the
+  // back-off keeps growing instead of restarting at 5 min (Pebble app source not refreshed)
+  {
+    uint32_t v = weather_version();
+    assert(load("normal.bin"));
+    assert(weather_version() == v);
+    assert(!weather_should_request(fetched + 60));
+    assert(s_ints[6] == 0);
+    int sent = 0;
+    for (int m = 61; m < 121; m++) {
+      time_t t = fetched + m * 60;
+      if (weather_should_request(t)) { sent++; weather_mark_requested(t); assert(load("normal.bin")); }
+    }
+    assert(sent == 4);                                                    // 61, 66, 76, 96 (not 12)
+    weather_init();
+    assert(!weather_should_request(fetched + 60));                         // cleared mark persisted
+  }
 
   // corrupt blob rejected, cache kept
   uint8_t bad[10] = { 9 };

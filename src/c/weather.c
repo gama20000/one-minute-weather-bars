@@ -3,6 +3,7 @@
 
 #define PERSIST_WX_BLOB 3
 #define PERSIST_WX_STATUS 4
+#define PERSIST_WX_OBSOLETE 6      // 5 is used by main.c
 #define BLOB_VERSION 1
 #define BLOB_HEADER 20
 #define BLOB_DAY 8
@@ -11,7 +12,7 @@ static Weather s_wx;
 static uint8_t s_status = WX_OK;
 static time_t s_last_request = 0;
 static uint8_t s_fail_count = 0;
-static bool s_obsolete;            // phone said the forecast no longer matches the settings
+static bool s_obsolete;            // phone said the forecast no longer matches the settings (persisted)
 static uint32_t s_version = 1;     // bumped whenever the forecast changes (render cache)
 
 static uint16_t rd16(const uint8_t *p) { return p[0] | (p[1] << 8); }
@@ -50,6 +51,13 @@ void weather_init(void) {
     if (n > 0) prv_parse(buf, n, &s_wx);
   }
   if (persist_exists(PERSIST_WX_STATUS)) s_status = persist_read_int(PERSIST_WX_STATUS);
+  s_obsolete = persist_exists(PERSIST_WX_OBSOLETE) && persist_read_int(PERSIST_WX_OBSOLETE);
+}
+
+static void prv_set_obsolete(bool v) {
+  if (s_obsolete == v) return;   // flash write only on change
+  s_obsolete = v;
+  persist_write_int(PERSIST_WX_OBSOLETE, v);
 }
 
 const Weather *weather_get(void) { return &s_wx; }
@@ -57,11 +65,16 @@ const Weather *weather_get(void) { return &s_wx; }
 bool weather_set_blob(const uint8_t *data, uint16_t len) {
   Weather w;
   if (!prv_parse(data, len, &w)) return false;
-  s_wx = w;
-  s_version++;
-  if (len <= PERSIST_DATA_MAX_LENGTH) persist_write_data(PERSIST_WX_BLOB, data, len);
-  s_fail_count = 0;
-  s_obsolete = false;
+  // Only a newer forecast ends the back-off: an expired one delivered again (the Pebble app's
+  // source not refreshed yet) keeps the request due, and must not bring back 5-minute retries.
+  if (!s_wx.valid || w.fetched_at > s_wx.fetched_at) s_fail_count = 0;
+  // Both parsed with memset, so the comparison covers padding too.
+  if (!s_wx.valid || memcmp(&w, &s_wx, sizeof(w)) != 0) {
+    s_wx = w;
+    s_version++;
+    if (len <= PERSIST_DATA_MAX_LENGTH) persist_write_data(PERSIST_WX_BLOB, data, len);
+  }
+  prv_set_obsolete(false);
   weather_set_status(WX_OK);
   return true;
 }
@@ -145,7 +158,8 @@ void weather_request_failed(void) {
 void weather_invalidate(void) {
   // New units / place / source: due now, and the back-off of the old request no longer applies.
   // The old forecast stays on the dial until the new one arrives.
-  s_obsolete = true;
+  // Persisted: a restart before the new forecast arrives must not take the old one as current.
+  prv_set_obsolete(true);
   s_fail_count = 0;
   s_last_request = 0;
 }

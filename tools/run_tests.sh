@@ -5,6 +5,7 @@
 set -e
 cd "$(dirname "$0")"
 node test_weather.js
+node test_flow.js
 sh build_host.sh
 gcc -std=c11 -D_DEFAULT_SOURCE -DHOSTDIR="\"$PWD/host\"" -Wall -Wno-unused-parameter -Ihost -include host/pebble.h \
   -o host/test_logic host/test_logic.c ../src/c/weather.c ../src/c/settings.c -lm

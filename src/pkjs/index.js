@@ -20,6 +20,7 @@ var SRC_PEBBLE = '0';     // wx_source: the Pebble app's weather (default) ...
 var busy = false;
 var pluginBroken = false;   // the Pebble app refused its weather source: Open-Meteo this session
 var retryTimer = null;
+var syncRetried = false;    // the timed settings retry was used in this failure streak
 
 function lsGet(k, def) {
   try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; }
@@ -178,21 +179,31 @@ function fetchWeather() {
   var key = forecastKey(s);
   var fahrenheit = String(s.units) === '1';
   function alive() { var n = settings(); return weatherNeeded(n) && forecastKey(n) === key; }
+  // `busy` stays set until the result is sent or dropped, settings delivery included.
   function finish(st, blob) {
-    busy = false;
     if (!alive()) {
       // Settings changed meanwhile: drop this result (the watch would take it as fresh) and, if
       // the forecast is still wanted, fetch once with the current settings.
+      busy = false;
       console.log('settings changed during fetch');
       if (weatherNeeded(settings())) fetchWeather();
       return;
     }
-    if (st === null) return;
-    if (st !== wx.STATUS.OK) { sendStatus(st); return; }
-    syncSettings(function () {
+    if (st === null) { busy = false; return; }
+    if (st !== wx.STATUS.OK) { busy = false; sendStatus(st); return; }
+    syncSettings(function (delivered) {
+      if (delivered === false) {
+        // The watch still has the old settings (other units, maybe): sending this forecast would
+        // mix them. It stays pending; the watch asks again after its back-off.
+        busy = false;
+        console.log('settings not delivered: forecast held back');
+        return;
+      }
+      if (!alive()) { finish(st, blob); return; }   // saved again while the settings were in flight
+      busy = false;
       send({ wx: blob }, function (ok) { if (ok) lsSet(LS_LAST_OK, Date.now()); });
+      console.log('forecast sent (' + blob.length + ' bytes)');
     });
-    console.log('forecast sent (' + blob.length + ' bytes)');
   }
   function openMeteo() { fetchOpenMeteo(s, fahrenheit, alive, finish); }
   if (source(s) === SRC_PEBBLE && nativeAvailable()) {
@@ -227,6 +238,7 @@ function syncSettings(cb) {
     var waiters = syncWaiters;
     syncWaiters = null;
     if (ok) {
+      syncRetried = false;
       if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
       var now = lsGet(LS_PENDING, null);
       if (JSON.stringify(settingsToWatch(settings())) === sentCfg && !(now && now.invalidate && !p.invalidate)) {
@@ -234,8 +246,10 @@ function syncSettings(cb) {
       } else {
         syncSettings();   // saved again while this was in flight: deliver the newer version
       }
-    } else if (!retryTimer) {
-      // One later attempt; after that, the next watch message or JS start retries.
+    } else if (!retryTimer && !syncRetried) {
+      // One later attempt per failure streak (a failed retry does not schedule another); after
+      // that, only the next watch message, settings save or JS start retries.
+      syncRetried = true;
       retryTimer = setTimeout(function () { retryTimer = null; syncSettings(); }, 60000);
     }
     waiters.forEach(function (w) { w(ok); });
@@ -280,6 +294,7 @@ Pebble.addEventListener('webviewclosed', function (e) {
   var obsolete = weatherNeeded(s) && (forecastKey(old) !== forecastKey(s) || !weatherNeeded(old));
   var prev = lsGet(LS_PENDING, null);
   lsSet(LS_PENDING, { invalidate: obsolete || !!(prev && prev.invalidate) });
+  syncRetried = false;   // a new save gets its own timed retry
   syncSettings();
 });
 
