@@ -105,7 +105,9 @@ void weather_draw_bars(GContext *ctx, const struct tm *now) {
     const WxDay *d = prv_day(off + i);
     int x = i * SCREEN_W / 6, xm = (2 * i + 1) * SCREEN_W / 12;
     int bx = x + BAR_INSET, bw = SCREEN_W / 6 - 2 * BAR_INSET + 1;
-    graphics_context_set_stroke_color(ctx, (p->bg.r + p->bg.g + p->bg.b >= 6) ? GColorLightGray : GColorDarkGray);
+    GColor frame = (p->bg.r + p->bg.g + p->bg.b >= 6) ? GColorLightGray : GColorDarkGray;
+    if (gcolor_equal(frame, p->bg)) frame = settings_nodata_color();   // gray background: keep it visible
+    graphics_context_set_stroke_color(ctx, frame);
     graphics_context_set_stroke_width(ctx, 1);
     graphics_draw_rect(ctx, GRect(bx, BAR_BOTTOM - BAR_H, bw, BAR_H + 1));
     if (d->pop != WX_POP_NONE && d->pop > 0) {

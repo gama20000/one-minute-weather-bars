@@ -187,8 +187,10 @@ static void prv_schedule(void) {
   int sw = settings_next_switch(sec);
   if (sw < next) next = sw;
   uint32_t delay = (uint32_t)(next - sec) * 1000 - ms + 50;   // land just after the boundary
-  if (s_wake_timer) app_timer_reschedule(s_wake_timer, delay);
-  else s_wake_timer = app_timer_register(delay, prv_wake_timer, NULL);
+  // A failed reschedule (timer already fired / gone) leaves no timer: register a new one.
+  if (!s_wake_timer || !app_timer_reschedule(s_wake_timer, delay)) {
+    s_wake_timer = app_timer_register(delay, prv_wake_timer, NULL);
+  }
 }
 
 static void prv_wake(void) {
@@ -264,7 +266,8 @@ static void prv_window_unload(Window *w) {
   if (s_cache) { gbitmap_destroy(s_cache); s_cache = NULL; }
 }
 
-static void prv_js_ready_timer(void *ctx) { prv_maybe_fetch(); }
+static AppTimer *s_js_timer;
+static void prv_js_ready_timer(void *ctx) { s_js_timer = NULL; prv_maybe_fetch(); }
 static void prv_phone_ready(void) { prv_maybe_fetch(); }
 
 static void prv_init(void) {
@@ -290,13 +293,14 @@ static void prv_init(void) {
   prv_update_tap_service();
   // Give PebbleKit JS a moment to start before the first request. If it is not up yet, the
   // phone's "ready" message (or the next wake-up) triggers the one quick retry allowed.
-  app_timer_register(3000, prv_js_ready_timer, NULL);
+  s_js_timer = app_timer_register(3000, prv_js_ready_timer, NULL);
 }
 
 static void prv_deinit(void) {
   if (s_minute_ticks) tick_timer_service_unsubscribe();
   if (s_wake_timer) app_timer_cancel(s_wake_timer);
   if (s_peek_timer) app_timer_cancel(s_peek_timer);
+  if (s_js_timer) { app_timer_cancel(s_js_timer); s_js_timer = NULL; }
   connection_service_unsubscribe();
   battery_state_service_unsubscribe();
   if (s_tap_subscribed) accel_tap_service_unsubscribe();

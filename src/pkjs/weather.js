@@ -40,7 +40,15 @@ function geocodeUrl(name, lang) {
 function u16(arr, v) { arr.push(v & 0xFF, (v >> 8) & 0xFF); }
 function u32(arr, v) { arr.push(v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF); }
 
-function num(v) { return (v === null || v === undefined || isNaN(v)) ? null : Number(v); }
+// Finite number, or a numeric string; anything else (missing, '', '  ', booleans, arrays,
+// objects, NaN, Infinity) is null = unknown, never 0.
+function num(v) {
+  var n;
+  if (typeof v === 'number') n = v;
+  else if (typeof v === 'string' && v.trim() !== '') n = Number(v);
+  else return null;
+  return isFinite(n) ? n : null;
+}
 
 function temp16(v) {
   v = num(v);
@@ -118,7 +126,7 @@ function seriesOf(props, name) { var p = props[name]; return (p && p.series) || 
 
 // Value of the series slot that starts at `t` (UTC epoch); null when absent.
 function slotAt(series, t, shape) {
-  if (!series || series.start === undefined || !series.stepSec) return null;
+  if (!series || typeof series.start !== 'number' || !series.stepSec) return null;
   var payload = series[shape || 'numericValue'];
   var vals = payload && payload.values;
   if (!vals) return null;
@@ -155,7 +163,7 @@ function buildBlobFromPlugin(envelope, fahrenheit, nowSec) {
   var hi = seriesOf(P, 'daily_high'), lo = seriesOf(P, 'daily_low');
   var pop = seriesOf(P, 'daily_precipitation'), code = seriesOf(P, 'daily_condition_code');
   var hmm = seriesOf(P, 'hourly_precipitation_amount');
-  if (!hi || hi.start === undefined || !hi.numericValue || !hi.numericValue.values ||
+  if (!hi || typeof hi.start !== 'number' || !isFinite(hi.start) || !hi.numericValue || !hi.numericValue.values ||
       !hi.numericValue.values.length) throw pluginError(STATUS.API, 'no daily forecast');
   var offv = P.utc_offset && P.utc_offset.numericValue;
   var off = Math.round((num(offv && offv.value) || 0) * 60);     // minutes east of UTC -> s

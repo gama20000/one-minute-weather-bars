@@ -275,4 +275,60 @@ e.geo[0]({ coords: { latitude: 38.7, longitude: -9.1 } });
 assert.strictEqual(e.geo.length, 2, 'exactly one restart');
 ok('colour-only save after the request: the queued request still fetches once');
 
+// colour saved again while the settings are in flight and a forecast waits for them: the
+// forecast (same cfg_id, still current) goes only after the newer settings are acknowledged
+e = setup({ plugin: true, manual: true });
+e.save({ theme: '2' });                      // settings #1 in flight
+e.ask(); e.subs[0].req.onData(plugEnv());    // forecast ready, waiting for settings #1
+e.save({ theme: '3' });                      // colour change: cfg_id unchanged
+e.ack(true);                                 // #1 acknowledged -> #2 (theme 3) goes out
+assert.strictEqual(e.wxSent().length, 0, 'no forecast while the theme 3 settings are in flight');
+assert.strictEqual(e.acks.length, 1); assert.strictEqual(e.acks[0].msg.theme, 3);
+e.ack(true);                                 // #2 acknowledged
+assert.strictEqual(e.wxSent().length, 1, 'forecast after the latest settings');
+var t3 = e.sent.findIndex(function (d) { return d.theme === 3; });
+assert(t3 >= 0 && t3 < e.sent.indexOf(e.wxSent()[0]));
+assert.strictEqual(JSON.parse(e.store['omw-pending']), null);
+ok('colour saved during settings delivery: forecast waits for the newer settings');
+// ... and if that second delivery fails, the forecast is held back
+e = setup({ plugin: true, manual: true });
+e.save({ theme: '2' });
+e.ask(); e.subs[0].req.onData(plugEnv());
+e.save({ theme: '3' });
+e.ack(true); e.ack(false);
+assert.strictEqual(e.wxSent().length, 0); assert.strictEqual(e.acks.length, 0);
+assert(JSON.parse(e.store['omw-pending']));
+ok('newer settings fail to deliver: the forecast is held back');
+
+// error status while settings are in flight: sent only after they are acknowledged
+e = setup({ plugin: true, manual: true });
+e.save({ theme: '2' });
+e.ask(); e.subs[0].req.onError({ code: 'TIMEOUT' });
+assert.strictEqual(e.sent.filter(function (d) { return d.status !== undefined; }).length, 0);
+e.ack(true);
+assert.strictEqual(e.acks.length, 1); assert.strictEqual(e.acks[0].msg.status, 2);
+ok('error status waits for the settings in flight');
+// ... and is not sent when the settings delivery fails
+e = setup({ plugin: true, manual: true });
+e.save({ theme: '2' });
+e.ask(); e.subs[0].req.onError({ code: 'TIMEOUT' });
+e.ack(false);
+assert.strictEqual(e.sent.filter(function (d) { return d.status !== undefined; }).length, 0);
+e.ask();                                     // `busy` was released: the next request fetches
+assert.strictEqual(e.subs.length, 2);
+ok('settings delivery fails: no status sent, the next request still runs');
+
+// settings page closed without saving, or an unreadable response: nothing changes
+e = setup({ plugin: true });
+e.save({ units: '1', theme: '2' });
+var before = JSON.stringify(e.store), nSent = e.sent.length;
+assert.doesNotThrow(function () {
+  e.fire('webviewclosed', { response: 'CANCELLED' });
+  e.fire('webviewclosed', { response: '{not json' });
+  e.fire('webviewclosed', { response: 'null' });
+  e.fire('webviewclosed', {});
+});
+assert.strictEqual(JSON.stringify(e.store), before); assert.strictEqual(e.sent.length, nSent);
+ok('webviewclosed with CANCELLED / invalid response: no throw, settings unchanged');
+
 log('index.js flows: all tests passed');

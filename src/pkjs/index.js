@@ -268,17 +268,19 @@ function fetchWeather() {
       return;
     }
     if (st === null) { busy = false; return; }
-    if (st !== wx.STATUS.OK) { busy = false; sendStatus(st); return; }
+    // Forecast or error status: either goes only after settings in flight are delivered, so it
+    // never collides with that AppMessage.
     syncSettings(function (delivered) {
       if (delivered === false) {
         // The watch still has the old settings (other units, maybe): sending this forecast would
         // mix them. It stays pending; the watch asks again after its back-off.
         busy = false;
-        console.log('settings not delivered: forecast held back');
+        console.log('settings not delivered: result held back');
         return;
       }
       if (!alive()) { finish(st, blob); return; }   // saved again while the settings were in flight
       busy = false;
+      if (st !== wx.STATUS.OK) { sendStatus(st); return; }
       send({ wx: blob }, function (ok) { if (ok) lsSet(LS_LAST_OK, Date.now()); });
       console.log('forecast sent (' + blob.length + ' bytes)');
     });
@@ -307,16 +309,24 @@ function fetchWeather() {
 // --- settings delivery ---
 // Settings saved on the phone stay pending until the watch acknowledges them, so a Bluetooth
 // failure cannot leave the two sides with different units or colours.
-// cb(delivered): true / false, or null when nothing was pending.
+// cb(delivered): true / false, or null when nothing was pending. Callers are told only once the
+// latest settings reached the watch (or failed to): a save while a message is in flight carries
+// them over to the message with the newer settings.
 var syncWaiters = null;   // callbacks waiting for the settings message in flight
 
 function watchSettings() { var d = settingsToWatch(settings()); d.cfg_id = cfgId(); return d; }
 
-function syncSettings(cb) {
-  if (syncWaiters) { if (cb) syncWaiters.push(cb); return; }   // one message at a time
+// carried: waiters of a delivered message whose settings were saved again meanwhile.
+function syncSettings(cb, carried) {
+  var waiting = (carried || []).concat(cb ? [cb] : []);
+  if (syncWaiters) { Array.prototype.push.apply(syncWaiters, waiting); return; }   // one message at a time
   var p = lsGet(LS_PENDING, null);
-  if (!p) { if (cb) cb(null); return; }
-  syncWaiters = cb ? [cb] : [];
+  if (!p) {
+    if (carried) carried.forEach(function (w) { w(true); });   // their message was delivered
+    if (cb) cb(null);
+    return;
+  }
+  syncWaiters = waiting;
   var d = watchSettings();
   var sentCfg = JSON.stringify(d);
   if (p.invalidate) d.cmd = CMD_INVALIDATE;
@@ -330,7 +340,10 @@ function syncSettings(cb) {
       if (JSON.stringify(watchSettings()) === sentCfg && !(now && now.invalidate && !p.invalidate)) {
         lsSet(LS_PENDING, null);
       } else {
-        syncSettings();   // saved again while this was in flight: deliver the newer version
+        // Saved again while this was in flight: deliver the newer version first; the waiters
+        // hear about that one (a forecast or status now would race it and the old settings).
+        syncSettings(null, waiters);
+        return;
       }
     } else if (!retryTimer && !syncRetried) {
       // One later attempt per failure streak (a failed retry does not schedule another); after
@@ -367,8 +380,13 @@ Pebble.addEventListener('showConfiguration', function () {
 });
 
 Pebble.addEventListener('webviewclosed', function (e) {
-  if (!e || !e.response) return;
-  var raw = clay.getSettings(e.response, false);
+  if (!e || !e.response || e.response === 'CANCELLED') return;   // page closed without saving
+  var raw;
+  try { raw = clay.getSettings(e.response, false); } catch (err) {
+    console.log('settings: unreadable response ' + err);
+    return;
+  }
+  if (!raw || typeof raw !== 'object') return;
   var old = settings();
   var s = {};
   Object.keys(raw).forEach(function (k) { s[k] = rawValue(raw[k]); });

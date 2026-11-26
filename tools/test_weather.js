@@ -170,6 +170,68 @@ assert.throws(function () { wx.buildBlobFromPlugin({ instances: [] }, false, now
 assert.throws(function () { wx.buildBlobFromPlugin({ instances: [{ properties: {} }] }, false, now); },
               function (err) { return err.status === wx.STATUS.API; });
 
+// --- missing values are unknown, never 0 ---
+var bad = fixture({ days: NORMAL, hourly: hourly });
+bad.daily.temperature_2m_max[0] = '';
+bad.daily.temperature_2m_min[0] = '   ';
+bad.daily.precipitation_probability_max[0] = false;
+bad.daily.precipitation_sum[0] = [];
+bad.daily.temperature_2m_max[1] = NaN;
+bad.daily.temperature_2m_min[1] = Infinity;
+bad.daily.precipitation_probability_max[1] = true;
+bad.daily.precipitation_sum[1] = -Infinity;
+bad.daily.temperature_2m_max[2] = '17.6';            // numeric strings still count
+bad.hourly.precipitation[1] = '';
+bad.hourly.precipitation[2] = NaN;
+var bb = wx.buildBlob(bad, false, now);
+var brd = function (o) { return bb[o] | (bb[o + 1] << 8); };
+assert.strictEqual(brd(20), 0x8000, "tmax '' -> missing");
+assert.strictEqual(brd(22), 0x8000, "tmin '   ' -> missing");
+assert.strictEqual(bb[24], 255, 'pop false -> missing');
+assert.strictEqual(brd(26), 0xFFFF, 'mm [] -> missing');
+assert.strictEqual(brd(28), 0x8000, 'tmax NaN -> missing');
+assert.strictEqual(brd(30), 0x8000, 'tmin Infinity -> missing');
+assert.strictEqual(bb[32], 255, 'pop true -> missing');
+assert.strictEqual(brd(34), 0xFFFF, 'mm -Infinity -> missing');
+assert.strictEqual(brd(36), 18, "'17.6' -> 18");
+assert.strictEqual(brd(20 + 8 * 8 + 2), 0xFFFF, "hourly '' -> missing");
+assert.strictEqual(brd(20 + 8 * 8 + 4), 0xFFFF, 'hourly NaN -> missing');
+assert.strictEqual(brd(20 + 8 * 8 + 6), 2, 'hourly 0.2 mm kept');
+
+var pbad = pluginEnvelope({ hourly: function (k) { return k === 0 ? '' : (k === 1 ? Infinity : 0.5); } });
+var pp = pbad.instances[0].properties;
+pp.daily_high.series.numericValue.values[0] = '';
+pp.daily_low.series.numericValue.values[0] = false;
+pp.daily_precipitation.series.numericValue.values[0] = NaN;
+pp.daily_high.series.numericValue.values[1] = Infinity;
+pp.daily_low.series.numericValue.values[1] = [];
+pp.daily_precipitation.series.numericValue.values[1] = '  ';
+pp.utc_offset.numericValue.value = '';
+var bp = wx.buildBlobFromPlugin(pbad, false, now);
+var bprd = function (o) { return bp[o] | (bp[o + 1] << 8); };
+assert.strictEqual(bprd(16), 0, "utc offset '' -> 0 s");
+assert.strictEqual(bprd(20), 0x8000, "plugin high '' -> missing");
+assert.strictEqual(bprd(22), 0x8000, 'plugin low false -> missing');
+assert.strictEqual(bp[24], 255, 'plugin pop NaN -> missing');
+assert.strictEqual(bprd(26), 0xFFFF, 'day 0 has unknown hours -> mm unknown');
+assert.strictEqual(bprd(28), 0x8000, 'plugin high Infinity -> missing');
+assert.strictEqual(bprd(30), 0x8000, 'plugin low [] -> missing');
+assert.strictEqual(bp[32], 255, "plugin pop '  ' -> missing");
+assert.strictEqual(bprd(34), 120, 'day 1: 24 x 0.5 mm');
+var PH = 20 + 7 * 8;
+assert.strictEqual(bprd(PH + 2), 0xFFFF, "hourly '' -> missing");
+assert.strictEqual(bprd(PH + 4), 0xFFFF, 'hourly Infinity -> missing');
+assert.strictEqual(bprd(PH + 6), 5, 'hourly 0.5 mm kept');
+// series with start: null is invalid (no slot matches), not epoch 0
+var pnull = pluginEnvelope();
+pnull.instances[0].properties.daily_low.series.start = null;
+var bn = wx.buildBlobFromPlugin(pnull, false, now);
+assert.strictEqual(bn[22] | (bn[23] << 8), 0x8000, 'low series with start null -> missing');
+var hnull = pluginEnvelope();
+hnull.instances[0].properties.daily_high.series.start = null;
+assert.throws(function () { wx.buildBlobFromPlugin(hnull, false, now); },
+              function (err) { return err.status === wx.STATUS.API; });
+
 // --- fixtures for the host harness ---
 var dir = path.join(__dirname, 'fixtures');
 if (!fs.existsSync(dir)) fs.mkdirSync(dir);
