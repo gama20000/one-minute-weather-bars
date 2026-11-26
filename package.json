@@ -1,7 +1,7 @@
 {
   "name": "one-minute-weather-bars",
   "author": "ffran",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "keywords": [
     "pebble-watchface",
     "weather",
@@ -74,7 +74,8 @@
       "night_refresh",
       "sched_scope",
       "peek_secs",
-      "wx_source"
+      "wx_source",
+      "cfg_id"
     ],
     "resources": {
       "media": [

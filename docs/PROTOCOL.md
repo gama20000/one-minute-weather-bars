@@ -57,7 +57,15 @@ As definições ficam pendentes no telemóvel até o relógio confirmar a receç
 
 Uma previsão que não seja mais recente do que a guardada (por exemplo, a mesma previsão vencida da app Pebble) não reinicia a espera entre tentativas do relógio, e também não é gravada de novo se for igual.
 
-Se as definições relevantes mudarem durante um pedido, incluindo a espera pela entrega das definições, o telemóvel descarta esse resultado e faz um único pedido novo, se a meteorologia ainda for precisa. Um estado (`status`) igual ao anterior não é gravado de novo nem redesenha o mostrador.
+Um estado (`status`) igual ao anterior não é gravado de novo nem redesenha o mostrador.
+
+## Versão das definições (`cfg_id`, int32)
+
+O telemóvel numera as definições que decidem se há pedido e o que ele devolve: unidades, fonte, localização, intervalo, visibilidade da meteorologia, horário sem meteorologia e toque no pulso. Uma mudança de cores ou de tema não muda o número. O `cfg_id` segue com as definições para o relógio, que o guarda e o repete em cada `cmd` = 1.
+
+- O telemóvel só atende pedidos feitos com o número atual. Um pedido com um número antigo não é atendido; as definições atuais seguem outra vez com `cmd` = 3, e o relógio volta a pedir já com elas, se a meteorologia puder aparecer. Assim, um pedido feito antes de o utilizador ligar o horário sem meteorologia nunca causa uma localização ou um download.
+- Se as definições mudarem durante um pedido, incluindo a espera pela entrega das definições, o telemóvel descarta o resultado. Só repete se, entretanto, o relógio tiver pedido de novo com as definições novas.
+- Se o relógio tiver outro número sem haver nada pendente (por exemplo, depois de os dados da app no telemóvel serem apagados), o telemóvel reenvia as definições uma única vez por número, para não criar um ciclo de mensagens.
 
 ## Fontes da previsão (definição `wx_source`, só no telemóvel)
 

@@ -126,6 +126,12 @@ uint16_t weather_mm(int d, bool rest, time_t now) {
   return sum > 65534 ? 65534 : sum;
 }
 
+int32_t weather_hour_index(time_t now) {
+  if (!s_wx.valid) return 0;
+  int32_t since = (int32_t)(now - (time_t)s_wx.day0_start);
+  return since >= 0 ? since / 3600 : -1 - (-since - 1) / 3600;   // floor, also before day 0
+}
+
 static int32_t prv_interval_s(void) { return g_settings.interval_min * 60; }
 
 bool weather_is_stale(time_t now) {

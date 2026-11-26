@@ -47,6 +47,9 @@ int weather_day_offset(uint32_t watch_ymd);
 // Today's precipitation in tenths of mm for forecast day `d`; rest_of_day sums only
 // the hours still to come (from the hourly forecast). WX_MM_NONE when unknown.
 uint16_t weather_mm(int d, bool rest_of_day, time_t now);
+// Index of the forecast hour containing `now` (hours of the weather location, e.g. :30 in
+// UTC+05:30): the rest-of-day amount can only change when this changes.
+int32_t weather_hour_index(time_t now);
 
 // Whether the cache is older than allowed (shown discreetly on the dial).
 bool weather_is_stale(time_t now);

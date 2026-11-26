@@ -12,7 +12,9 @@ console.log = function () {};   // the app's own logging
 function setup(opts) {
   opts = opts || {};
   var env = { listeners: {}, sent: [], acks: [], xhrs: [], store: {}, geo: [], subs: [], unsubs: 0,
-              sendFail: false, timers: [] };
+              sendFail: false, timers: [], watchCfg: 0 };
+  // The watch keeps the cfg_id of the last settings it received and sends it with cmd 1.
+  function delivered(m) { if (m.cfg_id !== undefined) env.watchCfg = m.cfg_id; }
   global.localStorage = { getItem: function (k) { return env.store[k] || null; }, setItem: function (k, v) { env.store[k] = v; } };
   Object.defineProperty(global, 'navigator', { configurable: true, value: { language: 'pt-PT', geolocation: {
     getCurrentPosition: function (ok) { env.geo.push(ok); } } } });
@@ -23,7 +25,7 @@ function setup(opts) {
       env.sent.push(copy);
       if (opts.manual) { env.acks.push({ msg: copy, ok: ok, ko: ko }); return; }
       copy._ok = !env.sendFail;
-      if (env.sendFail) { if (ko) ko({}); } else if (ok) ok();
+      if (env.sendFail) { if (ko) ko({}); } else { delivered(copy); if (ok) ok(); }
     },
     openURL: function () {}, getAccountToken: function () { return ''; }, getWatchToken: function () { return ''; },
     getActiveWatchInfo: function () { return { platform: 'emery' }; }
@@ -48,9 +50,9 @@ function setup(opts) {
   Module._load = orig;
   env.fire = function (n, e) { (env.listeners[n] || []).slice().forEach(function (f) { f(e || {}); }); };
   env.save = function (s) { env.fire('webviewclosed', { response: JSON.stringify(s) }); };
-  env.ask = function () { env.fire('appmessage', { payload: { cmd: 1 } }); };
+  env.ask = function () { env.fire('appmessage', { payload: { cmd: 1, cfg_id: env.watchCfg } }); };
   env.wxSent = function () { return env.sent.filter(function (d) { return d.wx; }); };
-  env.ack = function (ok) { var a = env.acks.shift(); a.msg._ok = ok; if (ok) { if (a.ok) a.ok(); } else if (a.ko) a.ko({}); };
+  env.ack = function (ok) { var a = env.acks.shift(); a.msg._ok = ok; if (ok) { delivered(a.msg); if (a.ok) a.ok(); } else if (a.ko) a.ko({}); };
   env.retries = function () { return env.timers.filter(function (t) { return t.live && t.ms === 60000; }); };
   return env;
 }
@@ -91,6 +93,14 @@ for (i = 0; i < 100; i++) { e.ask(); e.subs[e.subs.length - 1].req.onData(plugEn
 assert.strictEqual(e.subs.filter(function (s) { return s.active; }).length, 0);
 ok('100 Pebble-source requests: no subscription left open');
 
+// a late error from a subscription already answered does not disable the Pebble source
+e = setup({ plugin: true });
+e.ask(); e.subs[0].req.onData(plugEnv());
+e.subs[0].req.onError({ code: 'PLUGIN_UNAVAILABLE' });
+e.ask();
+assert.strictEqual(e.subs.length, 2); assert.strictEqual(e.geo.length, 0);
+ok('late PLUGIN_UNAVAILABLE after the data: the Pebble source stays in use');
+
 // older phone app (no subscribeToSource) -> Open-Meteo
 e = setup({ plugin: false });
 e.ask(); assert.strictEqual(e.geo.length, 1); ok('no plugin API: falls back to Open-Meteo (GPS)');
@@ -116,9 +126,11 @@ assert.strictEqual(e.sent.pop().cmd, undefined); ok('save with only a colour cha
 e = setup({ plugin: true });
 e.sendFail = true; e.save({ units: '1' }); e.sendFail = false;
 assert(JSON.parse(e.store['omw-pending']).invalidate);
-e.ask();
+e.ask();                                     // asked with the old settings: not served ...
 var cfgIdx = e.sent.findIndex(function (d) { return d.units === 1 && d._ok; });
 assert(cfgIdx >= 0, 'pending settings resent');
+assert.strictEqual(e.sent[cfgIdx].cmd, 3); assert.strictEqual(e.subs.length, 0);
+e.ask();                                     // ... the watch asks again with the new ones
 e.subs[0].req.onData(plugEnv());
 var wxIdx = e.sent.findIndex(function (d) { return d.wx; });
 assert(wxIdx > cfgIdx && e.sent[wxIdx].wx[2] === 1, 'Fahrenheit forecast only after the settings');
@@ -126,15 +138,18 @@ assert.strictEqual(JSON.parse(e.store['omw-pending']), null);
 ok('Bluetooth failure on save: settings resent before the Fahrenheit forecast');
 
 // settings still not delivered when the forecast is ready: the forecast is held back
+// (a colour change keeps the request current, so the fetch itself runs)
 e = setup({ plugin: true });
-e.sendFail = true; e.save({ units: '1' });
+e.sendFail = true; e.save({ theme: '2' });
 e.ask(); e.subs[0].req.onData(plugEnv());
 assert.strictEqual(e.wxSent().length, 0);
-assert(JSON.parse(e.store['omw-pending']).invalidate);
+assert(JSON.parse(e.store['omw-pending']));
 e.sendFail = false; e.ask();                 // link back: the next request works
 e.subs[1].req.onData(plugEnv());
-assert.strictEqual(e.wxSent().length, 1); assert.strictEqual(e.wxSent()[0].wx[2], 1);
-ok('settings delivery fails: no forecast sent with the old settings on the watch');
+assert.strictEqual(e.wxSent().length, 1);
+var th = e.sent.findIndex(function (d) { return d.theme === 2 && d._ok; });
+assert(th >= 0 && th < e.sent.indexOf(e.wxSent()[0]));
+ok('settings delivery fails: no forecast sent before the settings reach the watch');
 
 // pending settings on JS start
 e = setup({ plugin: true });
@@ -160,7 +175,10 @@ e.ask(); e.subs[0].req.onData(plugEnv());    // forecast in °C ready, waiting f
 e.save({ theme: '2', units: '1' });          // user switches to °F meanwhile
 e.ack(true);                                 // first settings acknowledged
 assert.strictEqual(e.wxSent().length, 0, 'Celsius forecast dropped');
-assert.strictEqual(e.subs.length, 2, 'one new request');
+assert.strictEqual(e.subs.length, 1, 'no request of its own: the watch decides');
+e.ack(true);                                 // the °F settings (cmd 3) reach the watch ...
+e.ask();                                     // ... which asks for a new forecast
+assert.strictEqual(e.subs.length, 2);
 e.subs[1].req.onData(plugEnv());
 while (e.acks.length) e.ack(true);
 assert.strictEqual(e.wxSent().length, 1); assert.strictEqual(e.wxSent()[0].wx[2], 1);
@@ -177,6 +195,17 @@ e.geo[0]({ coords: { latitude: 38.7, longitude: -9.1 } });
 assert.strictEqual(e.xhrs.length, 0); assert.strictEqual(e.wxSent().length, 0);
 ok('weather off during the location wait: no download, nothing sent');
 
+// units changed and weather hidden by the schedule during the location wait: the watch does
+// not ask again, so the phone starts no new location fix or download of its own
+e = setup({ plugin: false });
+var chosen = { wx_source: '1', units: '0' };
+e.save(chosen); e.ask();
+assert.strictEqual(e.geo.length, 1);
+e.save({ wx_source: '1', units: '1', sched_on: true, sched_scope: '0' });
+e.geo[0]({ coords: { latitude: 38.7, longitude: -9.1 } });
+assert.strictEqual(e.geo.length, 1); assert.strictEqual(e.xhrs.length, 0);
+ok('settings change without a new watch request: no GPS fix or download of its own');
+
 // units change during an Open-Meteo download: one refetch, stale result dropped
 e = setup({ plugin: false });
 e.ask(); e.geo[0]({ coords: { latitude: 38.7, longitude: -9.1 } });
@@ -189,5 +218,61 @@ e.geo[1]({ coords: { latitude: 38.7, longitude: -9.1 } });
 assert.strictEqual(e.xhrs.length, 2); assert(/fahrenheit/.test(e.xhrs[1].url));
 assert.strictEqual(e.wxSent().length, 0);
 ok('units change mid-download: Celsius result dropped, a single Fahrenheit download');
+
+// a request queued before the settings change does not authorise a new fetch
+e = setup({ plugin: false });
+e.save({ wx_source: '1', units: '0' });
+e.ask(); e.ask();                            // second cmd 1 queued while the first runs
+e.save({ wx_source: '1', units: '1', sched_on: true, sched_scope: '0' });
+e.geo[0]({ coords: { latitude: 38.7, longitude: -9.1 } });
+assert.strictEqual(e.geo.length, 1); assert.strictEqual(e.xhrs.length, 0);
+assert.strictEqual(e.wxSent().length, 0);
+ok('cmd 1 queued before a settings change: no fetch of its own after it');
+
+// several changes, all after the queued request: still nothing
+e = setup({ plugin: false });
+e.save({ wx_source: '1', units: '0' });
+e.ask(); e.ask();
+e.save({ wx_source: '1', units: '1' });
+e.save({ wx_source: '1', units: '1', loc_mode: 'manual', loc_name: 'Porto' });
+e.geo[0]({ coords: { latitude: 38.7, longitude: -9.1 } });
+assert.strictEqual(e.geo.length, 1); assert.strictEqual(e.xhrs.length, 0);
+ok('cmd 1 queued before several settings changes: no fetch of its own');
+
+// requests on both sides of a change: exactly one replacement, with the latest settings
+e = setup({ plugin: false });
+e.save({ wx_source: '1', units: '0' });
+e.ask(); e.ask();
+e.save({ wx_source: '1', units: '1' });
+e.ask(); e.ask();                            // the watch asks after the change (twice)
+e.geo[0]({ coords: { latitude: 38.7, longitude: -9.1 } });
+assert.strictEqual(e.geo.length, 2, 'exactly one restart');
+e.geo[1]({ coords: { latitude: 38.7, longitude: -9.1 } });
+assert.strictEqual(e.xhrs.length, 1); assert(/fahrenheit/.test(e.xhrs[0].url));
+ok('cmd 1 before and after a settings change: a single Fahrenheit fetch');
+
+// request between two changes: the second change forgets it
+e = setup({ plugin: false });
+e.save({ wx_source: '1', units: '0' });
+e.ask();
+e.save({ wx_source: '1', units: '1' });
+e.ask();                                     // asked after the first change ...
+e.save({ wx_source: '1', units: '1', loc_mode: 'manual', loc_name: 'Porto' });   // ... not the second
+e.geo[0]({ coords: { latitude: 38.7, longitude: -9.1 } });
+assert.strictEqual(e.geo.length, 1); assert.strictEqual(e.xhrs.length, 0);
+e.ask();                                     // the watch asks after the latest settings
+assert.strictEqual(e.xhrs.length, 1, 'manual location: geocoding request');
+ok('cmd 1 between two settings changes: forgotten; the next request fetches');
+
+// a colour-only save after the request keeps it (no cmd 3: the watch will not ask again)
+e = setup({ plugin: false });
+e.save({ wx_source: '1', units: '0' });
+e.ask();
+e.save({ wx_source: '1', units: '1' });
+e.ask();
+e.save({ wx_source: '1', units: '1', theme: '2' });
+e.geo[0]({ coords: { latitude: 38.7, longitude: -9.1 } });
+assert.strictEqual(e.geo.length, 2, 'exactly one restart');
+ok('colour-only save after the request: the queued request still fetches once');
 
 log('index.js flows: all tests passed');

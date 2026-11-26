@@ -171,6 +171,25 @@ int main(void) {
   int periods[] = { 60, 150, 300, 900, 1800 };
   for (int i = 0; i < 5; i++) assert(86400 % periods[i] == 0);
 
+  // ---- rest-of-day cache key: follows the forecast's hours (UTC+05:30 -> :30 boundaries) ----
+  {
+    char fp[256]; snprintf(fp, sizeof(fp), "%s/../fixtures/normal.bin", HOSTDIR);
+    FILE *f = fopen(fp, "rb"); uint8_t b[512]; int n = fread(b, 1, sizeof(b), f); fclose(f);
+    uint32_t d0 = 1795219200 - 5 * 3600 - 1800;              // 00:00 at UTC+05:30
+    b[8] = d0; b[9] = d0 >> 8; b[10] = d0 >> 16; b[11] = d0 >> 24;
+    assert(weather_set_blob(b, n));
+    assert(weather_hour_index(d0) == 0 && weather_hour_index(d0 - 1) == -1);
+    assert(weather_hour_index(d0 + 3599) == 0 && weather_hour_index(d0 + 3600) == 1);
+    int changes = 0;
+    for (time_t t = d0 + 60; t < d0 + 86400; t += 60) {   // the amount never changes within a key
+      if (weather_mm(0, true, t) != weather_mm(0, true, t - 60)) {
+        changes++;
+        assert(weather_hour_index(t) != weather_hour_index(t - 60));
+      }
+    }
+    assert(changes > 0);
+  }
+
   puts("weather.c logic: all tests passed");
   return 0;
 }

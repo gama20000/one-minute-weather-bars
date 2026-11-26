@@ -45,6 +45,12 @@ static bool prv_weather_needed(void) {
   return inside || bars;
 }
 
+static void prv_set_toggled(bool v) {
+  if (s_toggled == v) return;   // flash write only on change
+  s_toggled = v;
+  persist_write_bool(PERSIST_TAP_TOGGLED, v);
+}
+
 // Re-evaluate the schedule (every minute and after a settings change). Entering or leaving
 // the window resets the tap toggle, so the configured view always comes back.
 static void prv_update_schedule(void) {
@@ -52,7 +58,7 @@ static void prv_update_schedule(void) {
   bool off = settings_weather_scheduled_off(localtime(&now));
   if (off != s_sched_off) {
     s_sched_off = off;
-    if (s_toggled) { s_toggled = false; persist_write_bool(PERSIST_TAP_TOGGLED, false); }
+    prv_set_toggled(false);
   }
 }
 
@@ -62,7 +68,8 @@ static void prv_update_schedule(void) {
 // is blitted and only the ticks (the pointed one changes), the hour and the hand are drawn
 // on top. The copy is rebuilt only when something it shows changes (see CacheKey).
 typedef struct {
-  uint32_t wx_version, ymd, hour_utc;
+  uint32_t wx_version, ymd;
+  int32_t wx_hour;
   uint8_t inside, bars, stale, error, bt, battery;
 } CacheKey;
 
@@ -116,8 +123,9 @@ static void prv_update(Layer *layer, GContext *ctx) {
   memset(&key, 0, sizeof(key));
   key.wx_version = weather_version();
   key.ymd = ymd_from_tm(&local);
-  // "rain still expected today" changes every hour
-  key.hour_utc = (inside && g_settings.precip_mode == PRECIP_REST_OF_DAY) ? now / 3600 : 0;
+  // "rain still expected today" changes every forecast hour, which follows the weather
+  // location's clock (not UTC hours: UTC+05:30 would show the old amount for 30 min)
+  key.wx_hour = (inside && g_settings.precip_mode == PRECIP_REST_OF_DAY) ? weather_hour_index(now) : 0;
   key.inside = inside; key.bars = bars; key.stale = stale; key.error = error;
   key.bt = connection_service_peek_pebble_app_connection();
   key.battery = g_settings.show_battery ? battery_state_service_peek().charge_percent : 0;
@@ -198,8 +206,7 @@ static void prv_peek_end(void *ctx) {
 
 static void prv_tap(AccelAxisType axis, int32_t direction) {
   if (g_settings.tap_mode == TAP_TOGGLE) {
-    s_toggled = !s_toggled;
-    persist_write_bool(PERSIST_TAP_TOGGLED, s_toggled);
+    prv_set_toggled(!s_toggled);
   } else if (g_settings.tap_mode == TAP_PEEK) {
     s_peeking = true;
     if (s_peek_timer) app_timer_reschedule(s_peek_timer, settings_peek_ms());
@@ -214,8 +221,13 @@ static void prv_update_tap_service(void) {
   if (want && !s_tap_subscribed) accel_tap_service_subscribe(prv_tap);
   if (!want && s_tap_subscribed) accel_tap_service_unsubscribe();
   s_tap_subscribed = want;
-  if (g_settings.tap_mode != TAP_TOGGLE) s_toggled = false;
-  if (g_settings.tap_mode != TAP_PEEK) s_peeking = false;
+  // Persisted too: otherwise turning the mode off and on again would bring back, after a
+  // restart, the alternative view from before.
+  if (g_settings.tap_mode != TAP_TOGGLE) prv_set_toggled(false);
+  if (g_settings.tap_mode != TAP_PEEK) {
+    s_peeking = false;
+    if (s_peek_timer) { app_timer_cancel(s_peek_timer); s_peek_timer = NULL; }   // no stray wake-up
+  }
 }
 
 static void prv_changed(bool settings_changed) {
@@ -284,6 +296,7 @@ static void prv_init(void) {
 static void prv_deinit(void) {
   if (s_minute_ticks) tick_timer_service_unsubscribe();
   if (s_wake_timer) app_timer_cancel(s_wake_timer);
+  if (s_peek_timer) app_timer_cancel(s_peek_timer);
   connection_service_unsubscribe();
   battery_state_service_unsubscribe();
   if (s_tap_subscribed) accel_tap_service_unsubscribe();
