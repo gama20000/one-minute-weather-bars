@@ -1,4 +1,4 @@
-// Open-Meteo forecast -> compact binary blob for the watch (format in docs/PROTOCOL.md).
+// Forecast (Open-Meteo or the Pebble app) -> compact binary blob for the watch (docs/PROTOCOL.md).
 // Pure functions: tested with Node in tools/test_weather.js.
 
 var FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
@@ -94,7 +94,108 @@ function buildBlob(json, fahrenheit, nowSec) {
   return out;
 }
 
+// ---- Pebble app weather (plugin source "weather/location", mobile app 2.0+) ----------------
+// Same blob as buildBlob, from the subscription envelope { validUntilMs, instances: [{ properties }] }.
+// Series: { start (UTC epoch of values[0], the place's local midnight), stepSec, numericValue:
+// { values, unit } | shortText: { values } }. Assumed (to confirm on a device): an hourly value
+// covers the hour that *starts* at its slot, as the daily ones cover the day that starts there.
+var PLUGIN_PROPERTIES = ['utc_offset', 'daily_high', 'daily_low', 'daily_precipitation',
+                         'daily_condition_code', 'hourly_precipitation_amount'];
+
+function iconFromPluginCode(code) {
+  switch (code) {
+    case 'sun': return ICON.SUN;
+    case 'partly_cloudy': return ICON.PARTLY;
+    case 'cloudy': return ICON.CLOUD;
+    case 'light_rain': return ICON.DRIZZLE;
+    case 'heavy_rain': return ICON.RAIN;
+    case 'light_snow': case 'heavy_snow': case 'rain_and_snow': return ICON.SNOW;
+    default: return ICON.NONE;
+  }
+}
+
+function seriesOf(props, name) { var p = props[name]; return (p && p.series) || null; }
+
+// Value of the series slot that starts at `t` (UTC epoch); null when absent.
+function slotAt(series, t, shape) {
+  if (!series || series.start === undefined || !series.stepSec) return null;
+  var payload = series[shape || 'numericValue'];
+  var vals = payload && payload.values;
+  if (!vals) return null;
+  var k = (t - series.start) / series.stepSec;
+  if (k < 0 || k >= vals.length || k !== Math.floor(k)) return null;
+  var v = vals[k];
+  if (v !== null && typeof v === 'object') v = 'text' in v ? v.text : v.value;
+  return v === undefined ? null : v;
+}
+
+function unitOf(series) { return (series && series.numericValue && series.numericValue.unit) || ''; }
+
+function tempIn(v, unit, fahrenheit) {
+  v = num(v);
+  if (v === null) return null;
+  var isF = /F/i.test(unit);
+  if (fahrenheit && !isF) return v * 9 / 5 + 32;
+  if (!fahrenheit && isF) return (v - 32) * 5 / 9;
+  return v;
+}
+
+function mmIn(v, unit) {
+  v = num(v);
+  if (v === null) return null;
+  return /^in/i.test(unit) ? v * 25.4 : v;
+}
+
+function pluginError(status, msg) { var e = new Error(msg); e.status = status; return e; }
+
+function buildBlobFromPlugin(envelope, fahrenheit, nowSec) {
+  var inst = envelope && envelope.instances && envelope.instances[0];
+  if (!inst) throw pluginError(STATUS.LOCATION, 'no weather location in the Pebble app');
+  var P = inst.properties || {};
+  var hi = seriesOf(P, 'daily_high'), lo = seriesOf(P, 'daily_low');
+  var pop = seriesOf(P, 'daily_precipitation'), code = seriesOf(P, 'daily_condition_code');
+  var hmm = seriesOf(P, 'hourly_precipitation_amount');
+  if (!hi || hi.start === undefined || !hi.numericValue || !hi.numericValue.values ||
+      !hi.numericValue.values.length) throw pluginError(STATUS.API, 'no daily forecast');
+  var offv = P.utc_offset && P.utc_offset.numericValue;
+  var off = Math.round((num(offv && offv.value) || 0) * 60);     // minutes east of UTC -> s
+  var day0 = hi.start;
+  var n = Math.min(NDAYS, hi.numericValue.values.length);
+  var hunit = unitOf(hmm);
+  function hourMm(t) { return mmIn(slotAt(hmm, t), hunit); }     // hour starting at t
+  var out = [];
+  out.push(1, n, fahrenheit ? 1 : 0, NHOURS);
+  u32(out, nowSec);
+  u32(out, day0);
+  u32(out, ymd(day0 + off));
+  u32(out, off);
+  for (var i = 0; i < n; i++) {
+    var t = day0 + i * 86400;
+    u16(out, temp16(tempIn(slotAt(hi, t), unitOf(hi), fahrenheit)));
+    u16(out, temp16(tempIn(slotAt(lo, t), unitOf(lo), fahrenheit)));
+    var p = num(slotAt(pop, t));
+    out.push(p === null ? 255 : Math.max(0, Math.min(100, Math.round(p))));
+    var c = slotAt(code, t, 'shortText');
+    if (c === null) c = slotAt(code, t, 'longText');
+    out.push(iconFromPluginCode(c));
+    // No daily amount in the plugin: sum the day's 24 hourly amounts, only when all are there.
+    var sum = 0;
+    for (var h = 0; h < 24 && sum !== null; h++) {
+      var v = hourMm(t + h * 3600);
+      sum = v === null ? null : sum + v;
+    }
+    u16(out, mm16(sum));
+  }
+  for (var j = 0; j < NHOURS; j++) {
+    var hv = j === 0 ? null : hourMm(day0 + (j - 1) * 3600);       // blob slot j ends at day0 + j h
+    u16(out, hv === null ? 0xFFFF : mm16(hv));
+  }
+  return out;
+}
+
 module.exports = {
   STATUS: STATUS, ICON: ICON, iconFromWmo: iconFromWmo, forecastUrl: forecastUrl,
-  geocodeUrl: geocodeUrl, buildBlob: buildBlob, NDAYS: NDAYS, NHOURS: NHOURS
+  geocodeUrl: geocodeUrl, buildBlob: buildBlob, NDAYS: NDAYS, NHOURS: NHOURS,
+  PLUGIN_PROPERTIES: PLUGIN_PROPERTIES, iconFromPluginCode: iconFromPluginCode,
+  buildBlobFromPlugin: buildBlobFromPlugin
 };

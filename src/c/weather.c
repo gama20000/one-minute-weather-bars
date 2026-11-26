@@ -11,7 +11,8 @@ static Weather s_wx;
 static uint8_t s_status = WX_OK;
 static time_t s_last_request = 0;
 static uint8_t s_fail_count = 0;
-static uint32_t s_version = 1;     // bumped whenever forecast or status changes (render cache)
+static bool s_obsolete;            // phone said the forecast no longer matches the settings
+static uint32_t s_version = 1;     // bumped whenever the forecast changes (render cache)
 
 static uint16_t rd16(const uint8_t *p) { return p[0] | (p[1] << 8); }
 static uint32_t rd32(const uint8_t *p) { return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24); }
@@ -60,14 +61,18 @@ bool weather_set_blob(const uint8_t *data, uint16_t len) {
   s_version++;
   if (len <= PERSIST_DATA_MAX_LENGTH) persist_write_data(PERSIST_WX_BLOB, data, len);
   s_fail_count = 0;
+  s_obsolete = false;
   weather_set_status(WX_OK);
   return true;
 }
 
-void weather_set_status(uint8_t st) {
-  if (st != s_status) s_version++;
+bool weather_set_status(uint8_t st) {
+  // Repeated identical errors: no flash write. The dial shows the status through the
+  // render cache key (error flag), so the forecast version is not bumped here.
+  if (st == s_status) return false;
   s_status = st;
   persist_write_int(PERSIST_WX_STATUS, st);
+  return true;
 }
 
 uint8_t weather_status(void) { return s_status; }
@@ -116,7 +121,7 @@ bool weather_is_stale(time_t now) {
 }
 
 bool weather_should_request(time_t now) {
-  bool due = !s_wx.valid || (int32_t)(now - s_wx.fetched_at) >= prv_interval_s();
+  bool due = !s_wx.valid || s_obsolete || (int32_t)(now - s_wx.fetched_at) >= prv_interval_s();
   if (!due) return false;
   // Back-off after failures: 5, 10, 20, 40 ... minutes, capped at the refresh interval.
   int32_t wait = 5 * 60;
@@ -131,8 +136,17 @@ void weather_mark_requested(time_t now) {
 }
 
 void weather_request_failed(void) {
-  // The message never reached the phone: undo the back-off step and retry in a minute.
-  if (s_fail_count > 0) s_fail_count--;
+  // The message never reached the phone. Only the first attempt (PebbleKit JS usually still
+  // starting) is retried at the next wake-up; later failures keep the back-off, so a link
+  // that stays broken costs one attempt every 10, 20, 40... minutes instead of every minute.
+  if (s_fail_count <= 1) s_last_request = 0;
+}
+
+void weather_invalidate(void) {
+  // New units / place / source: due now, and the back-off of the old request no longer applies.
+  // The old forecast stays on the dial until the new one arrives.
+  s_obsolete = true;
+  s_fail_count = 0;
   s_last_request = 0;
 }
 

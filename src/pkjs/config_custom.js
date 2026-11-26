@@ -57,6 +57,18 @@ module.exports = function () {
     if (sched) sched.on('change', syncSched);
     syncSched();
 
+    // Location fields only for the Open-Meteo source (the Pebble app has its own place).
+    var src = clayConfig.getItemByMessageKey('wx_source');
+    var locItems = ['loc_mode', 'loc_name'].map(function (k) {
+      return clayConfig.getItemByMessageKey(k);
+    }).filter(function (i) { return i; });
+    function syncSource() {
+      var om = src && String(src.get()) === '1';
+      locItems.forEach(function (i) { i.$element[0].style.display = om ? '' : 'none'; });
+    }
+    if (src) src.on('change', syncSource);
+    syncSource();
+
     // Peek duration only for "show all weather for a while" (tap mode 2).
     var tap = clayConfig.getItemByMessageKey('tap_mode');
     var peek = clayConfig.getItemByMessageKey('peek_secs');

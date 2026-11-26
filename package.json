@@ -73,7 +73,8 @@
       "day_refresh",
       "night_refresh",
       "sched_scope",
-      "peek_secs"
+      "peek_secs",
+      "wx_source"
     ],
     "resources": {
       "media": [

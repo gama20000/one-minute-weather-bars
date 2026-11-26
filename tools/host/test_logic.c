@@ -62,6 +62,31 @@ int main(void) {
   weather_mark_requested(fetched + 61 * 60);
   assert(!weather_should_request(fetched + 62 * 60));
   assert(weather_should_request(fetched + 67 * 60));
+  // delivery failures (Bluetooth up, message never reaches JS): only the first is retried
+  // at the next wake-up, later ones keep the back-off
+  weather_request_failed();
+  assert(weather_should_request(fetched + 62 * 60));
+  weather_mark_requested(fetched + 62 * 60);
+  weather_request_failed();
+  assert(!weather_should_request(fetched + 63 * 60));
+  assert(!weather_should_request(fetched + 71 * 60));
+  assert(weather_should_request(fetched + 72 * 60));                     // 10 min
+  {
+    int sent = 0;
+    for (int m = 72; m < 72 + 60; m++) {                                   // one wake per minute
+      time_t t = fetched + m * 60;
+      if (weather_should_request(t)) { sent++; weather_mark_requested(t); weather_request_failed(); }
+    }
+    assert(sent == 2);                                                    // 72, 92 (+20); next at 132 (+40)
+  }
+  // phone says the forecast is obsolete (new units/place): due at once despite the back-off
+  assert(!weather_should_request(fetched + 100 * 60));
+  weather_invalidate();
+  assert(weather_should_request(fetched + 100 * 60));
+  // repeated identical status: no write, no change reported
+  assert(weather_set_status(WX_ERR_NETWORK));
+  assert(!weather_set_status(WX_ERR_NETWORK));
+  assert(weather_set_status(WX_OK));
 
   // persistence: a restart reloads the cached forecast
   weather_init();
@@ -111,6 +136,17 @@ int main(void) {
   assert(settings_next_switch(12 * 3600) == 23 * 3600);
   assert(settings_next_switch(23 * 3600) == 86400 + 7 * 3600);
   assert(settings_next_switch(2 * 3600) == 7 * 3600);
+  // the "no weather" window boundaries wake the dial too (night 30 min, window from 23:01)
+  {
+    Settings keep = g_settings;
+    g_settings.sched_on = 1; g_settings.sched_start = 23 * 60 + 1; g_settings.sched_end = 6 * 60 + 30;
+    assert(settings_next_switch(23 * 3600) == 23 * 3600 + 60);              // not 23:30
+    assert(settings_next_switch(2 * 3600) == 6 * 3600 + 30 * 60);           // window end first
+    assert(settings_next_switch(12 * 3600) == 23 * 3600);                   // night switch first
+    g_settings.sched_on = 0;
+    assert(settings_next_switch(23 * 3600) == 86400 + 7 * 3600);           // off: ignored
+    g_settings = keep;
+  }
   // every offered interval divides 24 h, so a wake-up always lands on midnight
   int periods[] = { 60, 150, 300, 900, 1800 };
   for (int i = 0; i < 5; i++) assert(86400 % periods[i] == 0);

@@ -96,6 +96,80 @@ assert.strictEqual(e.day_start, 420); assert.strictEqual(e.night_start, 1410);
 assert.strictEqual(e.day_refresh, 150); assert.strictEqual(e.night_refresh, 900);
 assert.strictEqual(e.rain_c5, 0xBDEFFF); assert.strictEqual(e.rain_c20, 0x1762FF);
 
+// --- Pebble app weather (plugin source "weather/location") ---
+// Envelope shaped like the documented API: series start at the place's local midnight.
+function pluginEnvelope(o) {
+  o = o || {};
+  var off = o.offsetMin || 0;
+  var day0 = Date.UTC(2026, 10, 21) / 1000 - off * 60;
+  var unit = o.unit || '°C';
+  var days = o.days || 7;
+  var ser = function (step, vals, shape, u) {
+    var s = { start: day0, stepSec: step };
+    s[shape || 'numericValue'] = u === undefined ? { values: vals } : { values: vals, unit: u };
+    return { series: s };
+  };
+  var hi = [], lo = [], pop = [], code = [];
+  var codes = ['light_rain', 'partly_cloudy', 'heavy_rain', 'sun', 'cloudy', 'rain_and_snow', 'unknown'];
+  for (var i = 0; i < days; i++) {
+    hi.push(unit === '°F' ? 64.4 : 18.2); lo.push(unit === '°F' ? 48.9 : 9.4);
+    pop.push(i === 1 ? null : 80); code.push(codes[i % codes.length]);
+  }
+  var props = {
+    utc_offset: { numericValue: { value: off, unit: 'min' } },
+    daily_high: ser(86400, hi, 'numericValue', unit),
+    daily_low: ser(86400, lo, 'numericValue', unit),
+    daily_precipitation: ser(86400, pop, 'numericValue', '%'),
+    daily_condition_code: ser(86400, code, 'shortText')
+  };
+  if (o.hourly) {
+    var hv = [];
+    for (var k = 0; k < days * 24; k++) hv.push(o.hourly(k));
+    props.hourly_precipitation_amount = ser(3600, hv, 'numericValue', 'mm');
+  }
+  return { pluginUuid: 'x', validUntilMs: Date.now() + 3600e3, instances: [{ instanceId: 'a', properties: props }] };
+}
+var pb = wx.buildBlobFromPlugin(pluginEnvelope({ offsetMin: 60 }), false, now);
+var prd16 = function (o) { var v = pb[o] | (pb[o + 1] << 8); return v >= 0x8000 ? v - 0x10000 : v; };
+var prd32 = function (o) { return (pb[o] | pb[o + 1] << 8 | pb[o + 2] << 16 | pb[o + 3] << 24) >>> 0; };
+assert.strictEqual(pb.length, 20 + 7 * 8 + 73 * 2, '7 plugin days');
+assert.strictEqual(pb[1], 7);
+assert.strictEqual(prd32(4), now, 'fetched_at');
+assert.strictEqual(prd32(8), Date.UTC(2026, 10, 21) / 1000 - 3600, 'day0 = local midnight');
+assert.strictEqual(prd32(12), 20261121, 'location date of day 0');
+assert.strictEqual(prd32(16), 3600, 'utc offset minutes -> seconds');
+assert.strictEqual(prd16(20), 18); assert.strictEqual(prd16(22), 9);
+assert.strictEqual(pb[24], 80, 'pop %');
+assert.strictEqual(pb[25], wx.ICON.DRIZZLE, 'light_rain');
+assert.strictEqual(prd16(26) & 0xFFFF, 0xFFFF, 'no hourly amounts -> mm unknown');
+assert.strictEqual(pb[24 + 8], 255, 'missing pop');
+assert.strictEqual(pb[25 + 8], wx.ICON.PARTLY);
+assert.strictEqual(pb[25 + 16], wx.ICON.RAIN, 'heavy_rain');
+assert.strictEqual(pb[25 + 40], wx.ICON.SNOW, 'rain_and_snow');
+assert.strictEqual(pb[25 + 48], wx.ICON.NONE, 'unknown');
+assert.strictEqual(prd16(20 + 7 * 8) & 0xFFFF, 0xFFFF, 'hourly slot 0 unknown');
+// unit conversion both ways
+var pf = wx.buildBlobFromPlugin(pluginEnvelope({ unit: '°F' }), false, now);
+assert.strictEqual(pf[20] | (pf[21] << 8), 18, '64.4 F -> 18 C');
+var pc = wx.buildBlobFromPlugin(pluginEnvelope(), true, now);
+assert.strictEqual(pc[2], 1, 'blob says Fahrenheit');
+assert.strictEqual(pc[20] | (pc[21] << 8), 65, '18.2 C -> 65 F');
+// hourly amounts: daily mm = sum of the 24 hours; blob slot j = hour ending at day0 + j h
+var ph = wx.buildBlobFromPlugin(pluginEnvelope({ hourly: function (k) { return k < 24 ? 0.5 : (k === 30 ? null : 0); } }), false, now);
+var H = 20 + 7 * 8;
+var hrd = function (o) { return ph[o] | (ph[o + 1] << 8); };
+assert.strictEqual(hrd(26), 120, 'day 0: 24 x 0.5 mm = 12.0 mm');
+assert.strictEqual(hrd(26 + 8), 0xFFFF, 'day 1 has a missing hour -> unknown');
+assert.strictEqual(hrd(26 + 16), 0, 'day 2 dry');
+assert.strictEqual(hrd(H), 0xFFFF, 'slot 0 (hour before day 0) unknown');
+assert.strictEqual(hrd(H + 2), 5, 'slot 1 = first hour, 0.5 mm');
+assert.strictEqual(hrd(H + 2 * 31), 0xFFFF, 'missing hour stays unknown');
+// no location in the Pebble app / no forecast
+assert.throws(function () { wx.buildBlobFromPlugin({ instances: [] }, false, now); },
+              function (err) { return err.status === wx.STATUS.LOCATION; });
+assert.throws(function () { wx.buildBlobFromPlugin({ instances: [{ properties: {} }] }, false, now); },
+              function (err) { return err.status === wx.STATUS.API; });
+
 // --- fixtures for the host harness ---
 var dir = path.join(__dirname, 'fixtures');
 if (!fs.existsSync(dir)) fs.mkdirSync(dir);

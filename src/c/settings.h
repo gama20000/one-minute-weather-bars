@@ -69,5 +69,6 @@ GColor settings_rain_color(int mm);
 GColor settings_nodata_color(void);
 // Seconds between dial updates at this local time (day or night setting).
 int settings_refresh_period(const struct tm *t);
-// Seconds after midnight of the next day/night switch after `sec_of_day` (may be + 86400).
+// Seconds after midnight of the next day/night switch or "no weather" window boundary after
+// `sec_of_day` (may be + 86400).
 int settings_next_switch(int sec_of_day);

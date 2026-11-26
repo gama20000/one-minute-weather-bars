@@ -269,9 +269,20 @@ int settings_refresh_period(const struct tm *t) {
 }
 
 int settings_next_switch(int sec) {
-  int a = g_settings.day_start * 60, b = g_settings.night_start * 60, best = sec + 86400 * 2;
-  int cand[4] = { a, b, a + 86400, b + 86400 };
-  for (int i = 0; i < 4; i++) if (cand[i] > sec && cand[i] < best) best = cand[i];
+  int best = sec + 86400 * 2;
+  // Day/night switch, plus the start and end of the "no weather" window: without them a long
+  // night interval could leave the weather visible (or hidden) for up to 30 min too long.
+  // The window's weekdays are ignored here: a boundary on an unselected day is one harmless wake.
+  int pts[4] = { g_settings.day_start * 60, g_settings.night_start * 60, -1, -1 };
+  if (g_settings.sched_on && g_settings.sched_start != g_settings.sched_end) {
+    pts[2] = g_settings.sched_start * 60;
+    pts[3] = g_settings.sched_end * 60;
+  }
+  for (int i = 0; i < 4; i++) {
+    if (pts[i] < 0) continue;
+    int c = pts[i] > sec ? pts[i] : pts[i] + 86400;
+    if (c < best) best = c;
+  }
   return best;
 }
 

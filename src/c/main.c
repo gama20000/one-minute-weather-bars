@@ -97,7 +97,9 @@ static bool prv_cache_store(GContext *ctx) {
 }
 
 static void prv_update(Layer *layer, GContext *ctx) {
+#ifdef PROFILE_FRAMES
   uint16_t t0 = time_ms(NULL, NULL);
+#endif
   time_t now = time(NULL);
   struct tm local = *localtime(&now);
   GRect b = layer_get_bounds(layer);
@@ -132,8 +134,10 @@ static void prv_update(Layer *layer, GContext *ctx) {
   clock_draw_ticks(ctx, local.tm_min);
   clock_draw_hour(ctx, &local, !inside);
   clock_draw_hand(ctx, local.tm_min);       // drawn last: always visible
+#ifdef PROFILE_FRAMES   // development only: build with -DPROFILE_FRAMES
   uint16_t t1 = time_ms(NULL, NULL);
   APP_LOG(APP_LOG_LEVEL_DEBUG, "frame %s %d ms", hit ? "cache" : "full", (int)((uint16_t)(t1 - t0)));
+#endif
 }
 
 static void prv_maybe_fetch(void) {
@@ -214,12 +218,13 @@ static void prv_update_tap_service(void) {
   if (g_settings.tap_mode != TAP_PEEK) s_peeking = false;
 }
 
-static void prv_changed(void) {
+static void prv_changed(bool settings_changed) {
+  layer_mark_dirty(s_layer);     // forecast / status: the render cache key decides what to redraw
+  if (!settings_changed) return;
   prv_cache_invalidate();
   prv_update_schedule();
   prv_update_tap_service();
   window_set_background_color(s_window, settings_palette()->bg);
-  layer_mark_dirty(s_layer);
   prv_maybe_fetch();
   prv_schedule();
 }
@@ -248,13 +253,14 @@ static void prv_window_unload(Window *w) {
 }
 
 static void prv_js_ready_timer(void *ctx) { prv_maybe_fetch(); }
+static void prv_phone_ready(void) { prv_maybe_fetch(); }
 
 static void prv_init(void) {
   settings_load();
   weather_init();
   draw_fonts_load();
   clock_render_init();
-  comm_init(prv_changed);
+  comm_init(prv_changed, prv_phone_ready);
 
   s_window = window_create();
   window_set_background_color(s_window, settings_palette()->bg);
@@ -270,7 +276,8 @@ static void prv_init(void) {
     s_sched_off = settings_weather_scheduled_off(localtime(&now));
   }
   prv_update_tap_service();
-  // Give PebbleKit JS a moment to start before the first request.
+  // Give PebbleKit JS a moment to start before the first request. If it is not up yet, the
+  // phone's "ready" message (or the next wake-up) triggers the one quick retry allowed.
   app_timer_register(3000, prv_js_ready_timer, NULL);
 }
 

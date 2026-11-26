@@ -20,7 +20,7 @@
 | Proteção de legibilidade (hora e máximas da cor do fundo) | emulador | trocadas automaticamente por branco |
 | Meia-noite sem nova previsão: HOJE passa para o dia seguinte e os blocos avançam | emulador (01:01 de 22 Nov) | OK |
 | Telemóvel desligado + previsão desatualizada | emulador | os dois indicadores aparecem |
-| Primeiro pedido ao arrancar (o JS ainda não estava pronto) | emulador | **corrigido**: o JS pede ao arrancar, e o relógio volta a tentar no minuto seguinte se o envio falhar |
+| Primeiro pedido ao arrancar (o JS ainda não estava pronto) | emulador | **corrigido**: o JS avisa o relógio de que está pronto (`cmd` = 2) e é o relógio que decide se pede; se o primeiro envio falhar, o relógio tenta uma vez na ativação seguinte e depois aplica a espera progressiva |
 | Página de definições (Clay real, Chrome sem ecrã): secções colapsáveis; "Cores personalizadas" só com o tema Personalizado; cores corretas | Chrome headless | OK. **Corrigido**: a página recebia o modelo do relógio vazio e mostrava todas as cores a branco |
 | Marcação apontada pelo ponteiro encurtada (40 %, mín. 2 px) | emulador emery | OK |
 | Lógica C: datas, mês/ano/bissexto, mm restantes, cache, back-off, dados corrompidos | PC (`tools/host/test_logic.c`) | OK |

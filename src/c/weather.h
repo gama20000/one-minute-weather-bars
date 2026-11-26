@@ -35,9 +35,10 @@ void weather_init(void);
 const Weather *weather_get(void);
 // Store a forecast blob received from the phone (also persisted). Returns false if malformed.
 bool weather_set_blob(const uint8_t *data, uint16_t len);
-void weather_set_status(uint8_t status);
+// Returns true when the status actually changed (and was persisted).
+bool weather_set_status(uint8_t status);
 uint8_t weather_status(void);
-// Changes whenever the forecast or the status changes (used to invalidate the render cache).
+// Changes whenever the forecast changes (used to invalidate the render cache).
 uint32_t weather_version(void);
 
 // Index into day[] of the forecast day whose location date equals the watch date
@@ -53,6 +54,8 @@ bool weather_is_stale(time_t now);
 bool weather_should_request(time_t now);
 void weather_mark_requested(time_t now);
 void weather_request_failed(void);
+// The phone changed units, place or source: ask for a new forecast at the next chance.
+void weather_invalidate(void);
 
 uint32_t ymd_from_tm(const struct tm *t);
 int32_t days_from_ymd(uint32_t ymd);
