@@ -8,13 +8,17 @@ var log = console.log.bind(console);
 console.log = function () {};   // the app's own logging
 
 // opts.plugin: the phone app has subscribeToSource. opts.manual: AppMessage acks are given by
-// the test (env.ack) instead of at once.
+// the test (env.ack) instead of at once. opts.src: the chosen forecast source (default: the
+// Pebble app when the plugin API exists, else Open-Meteo), kept by every env.save. opts.store:
+// localStorage at JS start (default: those settings, already past the 1.1.3 migration).
 function setup(opts) {
   opts = opts || {};
+  var src = opts.src || (opts.plugin ? '0' : '1');
   var env = { listeners: {}, sent: [], acks: [], xhrs: [], store: {}, geo: [], subs: [], unsubs: 0,
               sendFail: false, timers: [], watchCfg: 0 };
   // The watch keeps the cfg_id of the last settings it received and sends it with cmd 1.
   function delivered(m) { if (m.cfg_id !== undefined) env.watchCfg = m.cfg_id; }
+  env.store = opts.store || { 'omw-src-om': 'true', 'omw-settings': JSON.stringify({ wx_source: src }) };
   global.localStorage = { getItem: function (k) { return env.store[k] || null; }, setItem: function (k, v) { env.store[k] = v; } };
   Object.defineProperty(global, 'navigator', { configurable: true, value: { language: 'pt-PT', geolocation: {
     getCurrentPosition: function (ok) { env.geo.push(ok); } } } });
@@ -43,13 +47,17 @@ function setup(opts) {
   function FakeClay(cfg) { this.config = cfg; Pebble.addEventListener('ready', function () {}); }
   FakeClay.prototype.generateUrl = function () { return 'data:'; };
   FakeClay.prototype.getSettings = function (r) { return JSON.parse(r); };
+  FakeClay.prototype.setSettings = function (k, v) {   // as @rebble/clay: stored for the page
+    var st = JSON.parse(localStorage.getItem('clay-settings') || '{}'); st[k] = v;
+    localStorage.setItem('clay-settings', JSON.stringify(st));
+  };
   var orig = Module._load;
   Module._load = function (req) { return req === '@rebble/clay' ? FakeClay : orig.apply(this, arguments); };
   Object.keys(require.cache).forEach(function (k) { if (k.indexOf(path.join(root, 'src')) === 0) delete require.cache[k]; });
   require(path.join(root, 'src/pkjs/index.js'));
   Module._load = orig;
   env.fire = function (n, e) { (env.listeners[n] || []).slice().forEach(function (f) { f(e || {}); }); };
-  env.save = function (s) { env.fire('webviewclosed', { response: JSON.stringify(s) }); };
+  env.save = function (s) { env.fire('webviewclosed', { response: JSON.stringify(Object.assign({ wx_source: src }, s)) }); };
   env.ask = function () { env.fire('appmessage', { payload: { cmd: 1, cfg_id: env.watchCfg } }); };
   env.wxSent = function () { return env.sent.filter(function (d) { return d.wx; }); };
   env.ack = function (ok) { var a = env.acks.shift(); a.msg._ok = ok; if (ok) { delivered(a.msg); if (a.ok) a.ok(); } else if (a.ko) a.ko({}); };
@@ -102,7 +110,7 @@ assert.strictEqual(e.subs.length, 2); assert.strictEqual(e.geo.length, 0);
 ok('late PLUGIN_UNAVAILABLE after the data: the Pebble source stays in use');
 
 // older phone app (no subscribeToSource) -> Open-Meteo
-e = setup({ plugin: false });
+e = setup({ plugin: false, src: '0' });
 e.ask(); assert.strictEqual(e.geo.length, 1); ok('no plugin API: falls back to Open-Meteo (GPS)');
 // plugin refuses -> Open-Meteo
 e = setup({ plugin: true });
@@ -330,5 +338,27 @@ assert.doesNotThrow(function () {
 });
 assert.strictEqual(JSON.stringify(e.store), before); assert.strictEqual(e.sent.length, nSent);
 ok('webviewclosed with CANCELLED / invalid response: no throw, settings unchanged');
+
+// 1.1.3 default change: settings saved with the Pebble app source move to Open-Meteo once,
+// also in the values Clay shows on the settings page; the watch is told and asks again
+e = setup({ plugin: true, store: {
+  'omw-settings': JSON.stringify({ wx_source: '0', units: '0' }),
+  'clay-settings': JSON.stringify({ wx_source: '0', units: '0' }) } });
+assert.strictEqual(JSON.parse(e.store['omw-settings']).wx_source, '1');
+assert.strictEqual(JSON.parse(e.store['clay-settings']).wx_source, '1');
+e.fire('ready');
+assert.strictEqual(e.sent[0].cmd, 3); assert.strictEqual(e.sent[0].cfg_id, 1);
+e.ask(); assert.strictEqual(e.subs.length, 0); assert.strictEqual(e.geo.length, 1);
+ok('old default (Pebble app) moved to Open-Meteo once; cmd 3, then an Open-Meteo fetch');
+// ... only once: choosing the Pebble app again afterwards is kept
+e = setup({ plugin: true, store: { 'omw-src-om': 'true', 'omw-settings': JSON.stringify({ wx_source: '0' }) } });
+assert.strictEqual(JSON.parse(e.store['omw-settings']).wx_source, '0');
+e.ask(); assert.strictEqual(e.subs.length, 1);
+ok('Pebble app chosen after the migration: kept');
+// fresh install: Open-Meteo by default, nothing to deliver
+e = setup({ plugin: true, store: {} });
+e.fire('ready'); assert.strictEqual(e.sent.filter(function (d) { return d.cmd === 3; }).length, 0);
+e.ask(); assert.strictEqual(e.subs.length, 0); assert.strictEqual(e.geo.length, 1);
+ok('fresh install: Open-Meteo by default');
 
 log('index.js flows: all tests passed');

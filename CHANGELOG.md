@@ -2,6 +2,11 @@
 
 All notable changes to One Minute Weather Bars (Pebble Time 2 / emery).
 
+## 1.1.3 (2026-11-27)
+
+### Changes
+- **Open-Meteo is the default forecast source again**, because the Pebble app's weather does not provide rain amounts in millimetres yet. Settings saved with the Pebble app source in 1.1.0-1.1.2 (its default at the time) are moved to Open-Meteo once on update. The Pebble app source stays available in the settings for anyone who prefers it, and is kept if chosen again.
+
 ## 1.1.2 (2026-11-27)
 
 ### Changes

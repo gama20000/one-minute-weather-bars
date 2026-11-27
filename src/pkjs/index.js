@@ -15,8 +15,9 @@ var LS_CFG_ID = 'omw-cfg-id';      // version of the settings that decide whethe
 var CMD_FETCH = 1;        // watch -> phone: send a forecast
 var CMD_READY = 2;        // phone -> watch: JS started, the watch decides whether to ask
 var CMD_INVALIDATE = 3;   // phone -> watch (with settings): the cached forecast is obsolete
-var SRC_PEBBLE = '0';     // wx_source: the Pebble app's weather (default) ...
-                          // ... or '1': Open-Meteo
+var SRC_PEBBLE = '0';     // wx_source: the Pebble app's weather (no mm yet) ...
+var SRC_OPENMETEO = '1';  // ... or Open-Meteo (default: rain amounts for every day)
+var LS_SRC_MIGRATED = 'omw-src-om';   // set once the 1.1.3 change of default was applied
 
 var busy = false;
 var askedAgain = false;      // cmd 1 arrived while a fetch was running, after the last forecast change
@@ -133,7 +134,7 @@ function autoLocation(cb) {
 }
 
 // --- forecast ---
-function source(s) { return s.wx_source === undefined ? SRC_PEBBLE : String(s.wx_source); }
+function source(s) { return s.wx_source === undefined ? SRC_OPENMETEO : String(s.wx_source); }
 function nativeAvailable() { return !pluginBroken && typeof Pebble.subscribeToSource === 'function'; }
 
 // Settings that change what a forecast request returns.
@@ -363,6 +364,22 @@ function rawValue(x) {
 // One Clay for the whole session: every `new Clay` adds a 'ready' listener that keeps that
 // instance alive, so re-creating it per page opening leaked one instance each time.
 var clay = new Clay(buildConfig(configLang(settings())), customFn, { autoHandleEvents: false });
+
+// 1.1.3: Open-Meteo becomes the default, because the Pebble app gives no rain amounts yet.
+// Settings saved by 1.1.0-1.1.2 hold the old default (Pebble app) as if it had been chosen,
+// so they move to Open-Meteo once, here and in the values Clay shows on the settings page.
+(function migrateSourceDefault() {
+  if (lsGet(LS_SRC_MIGRATED, false)) return;
+  lsSet(LS_SRC_MIGRATED, true);
+  try { clay.setSettings('wx_source', SRC_OPENMETEO); } catch (e) { /* page shows the default */ }
+  var s = lsGet(LS_SETTINGS, null);
+  if (!s || s.wx_source === undefined || String(s.wx_source) === SRC_OPENMETEO) return;
+  s.wx_source = SRC_OPENMETEO;
+  lsSet(LS_SETTINGS, s);
+  lsSet(LS_CFG_ID, cfgId() + 1);        // requests made with the old source are not served
+  var prev = lsGet(LS_PENDING, null);   // delivered at 'ready'; cmd 3 makes the watch ask again
+  lsSet(LS_PENDING, { invalidate: weatherNeeded(s) || !!(prev && prev.invalidate) });
+})();
 
 Pebble.addEventListener('showConfiguration', function () {
   // Rebuild only the config so the page language follows the current setting (component

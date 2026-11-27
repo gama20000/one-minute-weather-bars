@@ -69,11 +69,11 @@ O telemóvel numera as definições que decidem se há pedido e o que ele devolv
 
 ## Fontes da previsão (definição `wx_source`, só no telemóvel)
 
-- **App Pebble (0, predefinida).** Usa a previsão que a app Pebble 2.0+ já mantém, através de `Pebble.subscribeToSource({ category: 'weather', item: 'location' })`. Cada pedido do relógio abre a subscrição, lê o primeiro envelope e cancela-a logo. O telemóvel não usa o GPS nem faz downloads próprios. A localização é a primeira da app Pebble.
+- **App Pebble (0).** Usa a previsão que a app Pebble 2.0+ já mantém, através de `Pebble.subscribeToSource({ category: 'weather', item: 'location' })`. Cada pedido do relógio abre a subscrição, lê o primeiro envelope e cancela-a logo. O telemóvel não usa o GPS nem faz downloads próprios. A localização é a primeira da app Pebble.
   - Máxima, mínima, probabilidade e ícone vêm das séries diárias `daily_high`, `daily_low`, `daily_precipitation` e `daily_condition_code`. A temperatura é convertida para a unidade escolhida.
-  - Os mm do dia são a soma das 24 horas de `hourly_precipitation_amount`, quando existem todas. Sem esses dados, ficam "sem dados" (`--`). A documentação da Pebble só promete esta série para a versão seguinte da app.
+  - Os mm do dia são a soma das 24 horas de `hourly_precipitation_amount`, quando existem todas. Sem esses dados, o mostrador mostra a probabilidade de chuva no lugar dos mm. A documentação da Pebble só promete esta série para a versão seguinte da app.
   - Pressuposto a confirmar num dispositivo: cada valor horário cobre a hora que **começa** no seu instante.
   - A previsão conta como recente enquanto `validUntilMs` não passar. Depois disso, mantém a idade.
   - Ícones: `sun` sol, `partly_cloudy` parcial, `cloudy` nuvens, `light_rain` chuvisco, `heavy_rain` chuva, `light_snow`/`heavy_snow`/`rain_and_snow` neve, `unknown` nenhum. Não há nevoeiro nem trovoada.
   - Se a app for anterior à 2.0, ou recusar a fonte (`PLUGIN_UNAVAILABLE`, `PERMISSION_DENIED`, `INVALID_REQUEST`), é usada a Open-Meteo até voltar a guardar as definições. `TIMEOUT`, `RATE_LIMITED` e `UNKNOWN` são enviados ao relógio como erro de rede. Sem localização na app Pebble, o estado é "localização indisponível".
-- **Open-Meteo (1).** Localização do telemóvel (GPS ou nome) e download próprio, como descrito acima. Fornece totais em mm para todos os dias.
+- **Open-Meteo (1, predefinida desde a 1.1.3).** Localização do telemóvel (GPS ou nome) e download próprio, como descrito acima. Fornece totais em mm para todos os dias. Na 1.1.3, as definições guardadas pelas versões 1.1.0 a 1.1.2 com a App Pebble (a predefinição de então) passam uma única vez para a Open-Meteo; quem escolher a App Pebble depois disso mantém-na.
