@@ -1,6 +1,6 @@
 """Exhaustive overlap test of the fork's REAL C code (via tools/host): every minute x every
 hour (24h + 12h), PT/EN, all weekdays and days of month (curved calendar), forecast
-normal / extreme / missing, rain strip and status icons. 1 px clearance required."""
+normal / extreme / without amounts / missing, rain strip and status icons. 1 px clearance required."""
 import sys, itertools
 import numpy as np
 from scipy.ndimage import binary_dilation
@@ -16,7 +16,7 @@ def main():
     issues = []
     ticks = mask(run_host('t', 0, 0))
     inside = np.zeros_like(ticks); bars = np.zeros_like(ticks)
-    for lang, blob, wd in itertools.product((1, 2), ('normal', 'extreme', 'live', None), range(7)):
+    for lang, blob, wd in itertools.product((1, 2), ('normal', 'extreme', 'live', 'nomm', None), range(7)):
         w = mask(run_host('w', 12, 0, wday=wd, lang=lang, blob=blob))
         b = mask(run_host('b', 12, 0, wday=wd, lang=lang, blob=blob))
         inside |= w; bars |= b

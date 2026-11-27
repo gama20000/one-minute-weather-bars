@@ -25,19 +25,27 @@ static void prv_temp(char *buf, size_t n, int16_t t, bool degree) {
 // Whole millimetres, rounded to the nearest integer (today at the top and the bars).
 static int prv_mm_int(uint16_t mm10) { return (mm10 + 5) / 10; }
 
+// Without an amount (the Pebble app's weather has no mm yet), the probability is shown
+// instead, e.g. "23%"; "--" only when neither is known.
+static bool prv_show_pop(uint16_t mm10, uint8_t pop) { return mm10 == WX_MM_NONE && pop != WX_POP_NONE; }
+
 // Bars: whole millimetres, like today's amount at the top.
-static void prv_mm_short(char *buf, size_t n, uint16_t mm10) {
-  if (mm10 == WX_MM_NONE) snprintf(buf, n, "--");
+static void prv_mm_short(char *buf, size_t n, uint16_t mm10, uint8_t pop) {
+  if (prv_show_pop(mm10, pop)) snprintf(buf, n, "%d%%", pop);
+  else if (mm10 == WX_MM_NONE) snprintf(buf, n, "--");
   else snprintf(buf, n, "%d", prv_mm_int(mm10));
 }
 
-static void prv_mm(char *buf, size_t n, uint16_t mm10) {
+static void prv_mm(char *buf, size_t n, uint16_t mm10, uint8_t pop) {
+  if (prv_show_pop(mm10, pop)) { snprintf(buf, n, "%d%%", pop); return; }
   if (mm10 == WX_MM_NONE) { snprintf(buf, n, "-- mm"); return; }
   snprintf(buf, n, "%d mm", prv_mm_int(mm10));
 }
 
-// Amount colour (gradient) - never the probability; grey for missing data.
-static GColor prv_mm_color(uint16_t mm10) {
+// Amount colour (gradient); the probability colour when the probability stands in for it;
+// grey for missing data.
+static GColor prv_mm_color(uint16_t mm10, uint8_t pop) {
+  if (prv_show_pop(mm10, pop)) return settings_palette()->pop;
   return mm10 == WX_MM_NONE ? settings_nodata_color() : settings_rain_color(prv_mm_int(mm10));
 }
 
@@ -58,7 +66,7 @@ static void prv_block(GContext *ctx, int x, int y, const char *lab, const WxDay 
   text_at(ctx, b, f, tx + aw + 4, y + 11, p->tmin);
 }
 
-// Top: [HOJE icon] / [drop 6,2 mm] / [17° / 11°]
+// Top: [HOJE icon] / [drop 6 mm, or drop 23% without an amount] / [17° / 11°]
 static void prv_top(GContext *ctx, const WxDay *d, uint16_t mm10) {
   const Palette *p = settings_palette();
   const int cx = DIAL_CX, y = TOP_BLOCK_Y;
@@ -68,11 +76,11 @@ static void prv_top(GContext *ctx, const WxDay *d, uint16_t mm10) {
   text_at(ctx, lab, g_fonts.g14b, x0, y - 5, p->wtext);
   weather_icon(ctx, x0 + lw + 2, y - 1, d->icon, p->icon, settings_icon_accents(), p->mm);
   char mm[16];
-  prv_mm(mm, sizeof(mm), mm10);
+  prv_mm(mm, sizeof(mm), mm10, d->pop);
   int mw = 7 + text_width(mm, g_fonts.g18b);
   int mx = cx - mw / 2;
   drop_icon(ctx, mx, y + 14, p->mm);
-  text_at(ctx, mm, g_fonts.g18b, mx + 7, y + 6, prv_mm_color(mm10));
+  text_at(ctx, mm, g_fonts.g18b, mx + 7, y + 6, prv_mm_color(mm10, d->pop));
   char a[8], b[8];
   prv_temp(a, sizeof(a), d->tmax, true);
   prv_temp(b, sizeof(b), d->tmin, true);
@@ -112,13 +120,14 @@ void weather_draw_bars(GContext *ctx, const struct tm *now) {
     graphics_draw_rect(ctx, GRect(bx, BAR_BOTTOM - BAR_H, bw, BAR_H + 1));
     if (d->pop != WX_POP_NONE && d->pop > 0) {
       int h = (BAR_H * d->pop + 50) / 100;
-      if (h > 0) {
-        graphics_context_set_fill_color(ctx, p->pop);          // bar = probability
-        graphics_fill_rect(ctx, GRect(bx, BAR_BOTTOM - h + 1, bw, h), 0, GCornerNone);
-      }
+      // Any chance of rain stays visible: a low probability (3% = 0.3 px) would round to
+      // nothing. 2 px = the bottom frame row plus one row inside the frame.
+      if (h < 2) h = 2;
+      graphics_context_set_fill_color(ctx, p->pop);            // bar = probability
+      graphics_fill_rect(ctx, GRect(bx, BAR_BOTTOM - h + 1, bw, h), 0, GCornerNone);
     }
     char t[8];
-    prv_mm_short(t, sizeof(t), d->mm10);
-    text_at(ctx, t, g_fonts.g14b, xm - text_width(t, g_fonts.g14b) / 2, BAR_LABEL_Y, prv_mm_color(d->mm10));
+    prv_mm_short(t, sizeof(t), d->mm10, d->pop);
+    text_at(ctx, t, g_fonts.g14b, xm - text_width(t, g_fonts.g14b) / 2, BAR_LABEL_Y, prv_mm_color(d->mm10, d->pop));
   }
 }

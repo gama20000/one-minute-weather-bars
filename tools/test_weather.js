@@ -237,4 +237,9 @@ var dir = path.join(__dirname, 'fixtures');
 if (!fs.existsSync(dir)) fs.mkdirSync(dir);
 fs.writeFileSync(path.join(dir, 'normal.bin'), Buffer.from(blob));
 fs.writeFileSync(path.join(dir, 'extreme.bin'), Buffer.from(ex));
+// Pebble app weather without amounts (mm unknown): the probability is drawn instead, "100%"
+// being the widest label.
+var nomm = pluginEnvelope();
+nomm.instances[0].properties.daily_precipitation.series.numericValue.values = [100, 100, 100, 100, 100, 100, 100];
+fs.writeFileSync(path.join(dir, 'nomm.bin'), Buffer.from(wx.buildBlobFromPlugin(nomm, false, now)));
 console.log('weather.js: all tests passed; fixtures written');

@@ -2,6 +2,14 @@
 
 All notable changes to One Minute Weather Bars (Pebble Time 2 / emery).
 
+## 1.1.2 (2026-11-27)
+
+### Changes
+- When the rain amount is not available (the Pebble app's weather does not provide millimetres yet), the watchface shows the chance of rain instead, for example "23%", rather than "--". Millimetres come back automatically when the source provides them.
+
+### Fixes
+- A low chance of rain (for example 3%) left its bar empty because it rounded down to zero pixels. Any chance above 0% now shows at least a thin bar.
+
 ## 1.1.1 (2026-11-27)
 
 ### Fixes
